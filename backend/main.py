@@ -10,7 +10,6 @@ from typing import List, Dict
 from functools import lru_cache
 from dotenv import load_dotenv
 
-load_dotenv()
 
 load_dotenv()
 

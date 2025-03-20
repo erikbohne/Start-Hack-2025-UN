@@ -23,7 +23,7 @@ export default function Map() {
   const animationSpeed = useRef<number>(2000); // 2 seconds per year by default
 
   // Data management
-  const cachedGeojsonData = useRef<{ [key: string]: any }>({});
+  const cachedGeojsonData = useRef<{ [key: string]: unknown }>({});
   const yearSequence = useRef<number[]>([]);
   const currentYearIndexRef = useRef<number>(0);
   const datasetCountryCombo = useRef<{ dataset: string; country: string }[]>(
