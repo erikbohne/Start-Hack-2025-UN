@@ -1,9 +1,14 @@
 import os
 from fastapi import FastAPI, HTTPException, Query
+from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
+from graphs.GeoChatAgent.agent import stream_geo_chat
 from enum import Enum
 from typing import List, Dict
 from functools import lru_cache
+from dotenv import load_dotenv
+
+load_dotenv()
 
 app = FastAPI()
 
@@ -107,6 +112,14 @@ def get_files(
                 except HTTPException as e:
                     result[year][dataset.value][country.value] = f"Error: {e.detail}"
     return result
+
+
+@app.post("/chat/stream")
+async def stream_chat(messages: List[Dict[str, str]]):
+    """
+    Endpoint that streams a chat log file.
+    """
+    return StreamingResponse(stream_geo_chat(messages), media_type="text/plain")
 
 
 if __name__ == "__main__":
