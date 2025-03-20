@@ -639,9 +639,6 @@ export default function Map() {
         ref={mapContainer}
         className="absolute inset-0"
         style={{
-          position: "absolute",
-          top: 0,
-          bottom: 0,
           width: "100%",
           height: "100%",
         }}
@@ -651,7 +648,7 @@ export default function Map() {
       <div className="absolute top-4 right-4 z-30">
         <button
           onClick={toggle3DMode}
-          className="bg-white text-gray-800 px-3 py-2 rounded-md shadow-lg flex items-center space-x-2 text-sm font-medium hover:bg-gray-100"
+          className="bg-blue-500 text-white px-3 py-2 rounded-md shadow-lg flex items-center space-x-2 text-sm font-medium hover:bg-blue-600 transition-colors duration-200"
         >
           <span>{is3DMode ? "2D Mode" : "3D Mode"}</span>
           <svg
@@ -671,7 +668,7 @@ export default function Map() {
 
       {/* Data controls with collapse/expand functionality */}
       <div
-        className={`absolute top-4 left-0 z-20 transition-all duration-300 transform ${
+        className={`absolute top-4 left-0 z-20 transition-all duration-300 transform shadow-xl ${
           dataControlsExpanded
             ? "translate-x-0"
             : "-translate-x-[calc(100%-40px)]"
@@ -679,7 +676,7 @@ export default function Map() {
       >
         <button
           onClick={() => setDataControlsExpanded(!dataControlsExpanded)}
-          className="absolute right-2 top-2 bg-blue-500 text-white rounded-full w-8 h-8 flex items-center justify-center z-30 shadow-md"
+          className="absolute right-2 top-2 bg-blue-500 text-white rounded-full w-8 h-8 flex items-center justify-center z-30 shadow-md hover:bg-blue-600 transition-colors duration-200"
         >
           {dataControlsExpanded ? (
             <svg
@@ -709,7 +706,7 @@ export default function Map() {
             </svg>
           )}
         </button>
-        <div className="bg-white p-4 rounded-r-lg shadow-lg">
+        <div className="rounded-r-lg overflow-hidden bg-white shadow-lg">
           <DataControls
             onApplyFilters={handleApplyFilters}
             datasetRanges={datasetRanges.current}
@@ -722,22 +719,22 @@ export default function Map() {
       {/* Legend */}
       {displayYear && (
         <div className="absolute top-16 right-4 bg-white p-3 rounded-lg shadow-lg z-20">
-          <h3 className="text-sm font-bold mb-2">Legend</h3>
+          <h3 className="text-sm font-bold mb-2 text-gray-800">Legend</h3>
           {datasetCountryCombo.current.some(
             ({ dataset }) => dataset === "PopDensity"
           ) && (
             <div className="mb-2">
               <div className="flex justify-between items-center">
-                <div className="text-xs font-semibold">Population Density</div>
+                <div className="text-xs font-semibold text-gray-700">Population Density</div>
                 {thresholdValues.PopDensity > 0 && (
-                  <div className="text-xs">
+                  <div className="text-xs text-gray-600">
                     (min: {thresholdValues.PopDensity})
                   </div>
                 )}
               </div>
               <div className="flex items-center">
                 <div className="w-full h-4 bg-gradient-to-r from-[rgb(255,245,235)] to-[rgb(165,15,21)] rounded-sm"></div>
-                <div className="flex justify-between w-full px-1 text-xs mt-1">
+                <div className="flex justify-between w-full px-1 text-xs mt-1 text-gray-600">
                   <span>Low</span>
                   <span>High</span>
                 </div>
@@ -749,16 +746,16 @@ export default function Map() {
           ) && (
             <div>
               <div className="flex justify-between items-center">
-                <div className="text-xs font-semibold">Precipitation</div>
+                <div className="text-xs font-semibold text-gray-700">Precipitation</div>
                 {thresholdValues.Precipitation > 0 && (
-                  <div className="text-xs">
+                  <div className="text-xs text-gray-600">
                     (min: {thresholdValues.Precipitation})
                   </div>
                 )}
               </div>
               <div className="flex items-center">
                 <div className="w-full h-4 bg-gradient-to-r from-[rgb(240,249,255)] to-[rgb(8,48,107)] rounded-sm"></div>
-                <div className="flex justify-between w-full px-1 text-xs mt-1">
+                <div className="flex justify-between w-full px-1 text-xs mt-1 text-gray-600">
                   <span>Low</span>
                   <span>High</span>
                 </div>
@@ -772,9 +769,9 @@ export default function Map() {
       {yearSequence.current.length > 1 && (
         <div className="absolute bottom-20 left-1/2 transform -translate-x-1/2 bg-white p-3 rounded-lg shadow-lg z-20 w-[80%] max-w-xl">
           <div className="flex justify-between mb-1">
-            <span className="text-xs">{Math.min(...yearSequence.current)}</span>
-            <span className="text-sm font-semibold">Year Timeline</span>
-            <span className="text-xs">{Math.max(...yearSequence.current)}</span>
+            <span className="text-xs text-gray-600">{Math.min(...yearSequence.current)}</span>
+            <span className="text-sm font-semibold text-gray-800">Year Timeline</span>
+            <span className="text-xs text-gray-600">{Math.max(...yearSequence.current)}</span>
           </div>
           <input
             type="range"
@@ -789,10 +786,10 @@ export default function Map() {
               <button
                 key={year}
                 onClick={() => handleYearSelection(index)}
-                className={`text-xs px-1 py-0.5 rounded ${
+                className={`text-xs px-1 py-0.5 rounded transition-colors duration-200 ${
                   currentYearIndexRef.current === index
                     ? "bg-blue-500 text-white font-bold"
-                    : "bg-gray-100 hover:bg-gray-200"
+                    : "bg-gray-100 hover:bg-gray-200 text-gray-700"
                 }`}
               >
                 {year}
@@ -807,41 +804,41 @@ export default function Map() {
         <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 bg-white p-3 rounded-lg shadow-lg z-20 flex items-center space-x-4">
           <button
             onClick={toggleAnimation}
-            className={`px-4 py-2 rounded-md font-medium ${
-              animating ? "bg-red-500 text-white" : "bg-green-500 text-white"
+            className={`px-4 py-2 rounded-md font-medium transition-colors duration-200 ${
+              animating ? "bg-red-500 hover:bg-red-600 text-white" : "bg-green-500 hover:bg-green-600 text-white"
             }`}
           >
             {animating ? "Pause" : "Play"}
           </button>
 
           <div className="flex items-center space-x-2">
-            <span className="text-sm font-medium">Speed:</span>
+            <span className="text-sm font-medium text-gray-700">Speed:</span>
             <button
               onClick={() => changeAnimationSpeed(4000)}
-              className={`px-2 py-1 rounded-md text-xs ${
+              className={`px-2 py-1 rounded-md text-xs transition-colors duration-200 ${
                 animationSpeed.current === 4000
                   ? "bg-blue-500 text-white"
-                  : "bg-gray-200"
+                  : "bg-gray-200 text-gray-700 hover:bg-gray-300"
               }`}
             >
               Slow
             </button>
             <button
               onClick={() => changeAnimationSpeed(2000)}
-              className={`px-2 py-1 rounded-md text-xs ${
+              className={`px-2 py-1 rounded-md text-xs transition-colors duration-200 ${
                 animationSpeed.current === 2000
                   ? "bg-blue-500 text-white"
-                  : "bg-gray-200"
+                  : "bg-gray-200 text-gray-700 hover:bg-gray-300"
               }`}
             >
               Medium
             </button>
             <button
               onClick={() => changeAnimationSpeed(1000)}
-              className={`px-2 py-1 rounded-md text-xs ${
+              className={`px-2 py-1 rounded-md text-xs transition-colors duration-200 ${
                 animationSpeed.current === 1000
                   ? "bg-blue-500 text-white"
-                  : "bg-gray-200"
+                  : "bg-gray-200 text-gray-700 hover:bg-gray-300"
               }`}
             >
               Fast
@@ -849,7 +846,7 @@ export default function Map() {
           </div>
 
           {displayYear && (
-            <div className="text-lg font-bold">Year: {displayYear}</div>
+            <div className="text-lg font-bold text-gray-800">Year: {displayYear}</div>
           )}
         </div>
       )}
@@ -878,17 +875,17 @@ export default function Map() {
                 d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
               ></path>
             </svg>
-            <span>Loading data...</span>
+            <span className="text-gray-700">Loading data...</span>
           </div>
         </div>
       )}
 
       {/* Debug information */}
-      <div className="absolute top-4 left-4 bg-white p-2 rounded-lg shadow-lg z-20 text-xs">
-        <div>Layers: {activeLayers.current.length}</div>
-        <div>Active year: {displayYear}</div>
-        <div>Years: {yearSequence.current.join(", ")}</div>
-        <div>Animation: {animating ? "On" : "Off"}</div>
+      <div className="absolute bottom-24 right-4 bg-white p-2 rounded-lg shadow-lg z-20 text-xs">
+        <div className="text-gray-700">Layers: {activeLayers.current.length}</div>
+        <div className="text-gray-700">Active year: {displayYear}</div>
+        <div className="text-gray-700">Years: {yearSequence.current.join(", ")}</div>
+        <div className="text-gray-700">Animation: {animating ? "On" : "Off"}</div>
       </div>
 
       {/* Error message */}
