@@ -198,8 +198,11 @@ export function VercelV0Chat() {
                 
                 // Check if this chunk contains an instruction
                 if (chunk.includes(instructionMarker)) {
+                    console.log("Found instruction marker in chunk:", chunk);
+                    
                     // Split the chunk at the instruction marker
                     const parts = chunk.split(instructionMarker);
+                    console.log("Split parts length:", parts.length);
                     
                     // Add the first part (before instruction) to content
                     if (parts[0].trim()) {
@@ -215,28 +218,31 @@ export function VercelV0Chat() {
                         );
                     }
                     
-                    // Process the instruction (the second part)
-                    if (parts.length > 1 && parts[1].trim()) {
-                        try {
-                            // Log the raw instruction data for debugging
-                            console.log("Raw instruction data:", parts[1].trim());
-                            
-                            // Process the instruction JSON
-                            const instructionResult = processInstruction(parts[1].trim());
-                            
-                            // Add the instruction result as a separate system message
-                            const instructionMessage = {
-                                id: generateMessageId(),
-                                type: "instruction",
-                                content: instructionResult,
-                                timestamp: new Date(),
-                                instructionData: { action: "processed", data: { instruction: parts[1].trim() } }
-                            };
-                            
-                            console.log("Adding instruction message:", instructionMessage);
-                            setMessages(prev => [...prev, instructionMessage]);
-                        } catch (error) {
-                            console.error("Error processing instruction:", error, "Raw data:", parts[1]);
+                    // Process each instruction (there might be multiple parts after splitting)
+                    for (let i = 1; i < parts.length; i++) {
+                        const instructionPart = parts[i].trim();
+                        if (instructionPart) {
+                            try {
+                                // Log the raw instruction data for debugging
+                                console.log(`Processing instruction part ${i}:`, instructionPart);
+                                
+                                // Process the instruction JSON
+                                const instructionResult = processInstruction(instructionPart);
+                                
+                                // Add the instruction result as a separate system message
+                                const instructionMessage = {
+                                    id: generateMessageId(),
+                                    type: "instruction",
+                                    content: instructionResult,
+                                    timestamp: new Date(),
+                                    instructionData: { action: "processed", data: { instruction: instructionPart } }
+                                };
+                                
+                                console.log("Adding instruction message:", instructionMessage);
+                                setMessages(prev => [...prev, instructionMessage]);
+                            } catch (error) {
+                                console.error(`Error processing instruction part ${i}:`, error, "Raw data:", instructionPart);
+                            }
                         }
                     }
                 } else {
@@ -284,8 +290,11 @@ export function VercelV0Chat() {
             const instructionData = JSON.parse(instructionJson);
             console.log("Processing instruction:", instructionData);
             
+            // Check for type property (could be from backend or our custom format)
+            const action = instructionData.type === 'instruction' ? instructionData.action : instructionData.action;
+            
             // Handle backend instruction format (which uses MapBoxActions enum)
-            if (instructionData.action === 'SET_CENTER' && instructionData.data) {
+            if (action === 'SET_CENTER' && instructionData.data) {
                 console.log("Processing SET_CENTER instruction:", instructionData);
                 if (instructionData.data.center && Array.isArray(instructionData.data.center)) {
                     // If we have a map instance, center it

@@ -3,6 +3,7 @@ from typing import List, Dict, Any, AsyncGenerator
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
 from graphs.GeoChatAgent.utils.state import GraphState
 from graphs.GeoChatAgent.utils.nodes import route_user_message, chat_agent, instructions, create_instructions
+from graphs.GeoChatAgent.utils.models import MapBoxInstruction
 import json
 
 workflow = StateGraph(GraphState)
@@ -72,21 +73,34 @@ async def stream_geo_chat(messages: List[Dict[str, Any]], mapState: Dict[str, An
         "map_context": map_state_description if mapState else None
     }
     
+    # Track if we've already processed instructions from the current state
+    processed_states = set()
+    
     async for response in graph.astream_events(
-        initial_state, version="v2", include_tags="answer"
+        initial_state, version="v2"
     ):
+        # Get the full state to check for frontend actions
+        state = response.get("state", {})
+        state_id = id(state)  # Use object id to track if we've seen this state
+        
         data = response.get("data", {})
-        chunk_obj = data.get("chunk")
-        
-        # Handle regular message chunks
-        if chunk_obj and chunk_obj.content != "":
-            chunk_count += 1
-            print(f"Yielding text chunk #{chunk_count}: {chunk_obj.content[:30]}...")
-            yield chunk_obj.content
-        
-        # Handle map instructions if present
-        frontend_actions = data.get("frontend_actions", [])
-        if frontend_actions:
+
+        if isinstance(data.get("output"), MapBoxInstruction):
+            instruction_count += 1
+            instruction = {
+                "type": "instruction",
+                "action": data.get("output").action.value,
+                "data": data.get("output").data
+            }
+            instruction_json = json.dumps(instruction)
+            yield f"INSTRUCTION:{instruction_json}"
+            continue
+
+        # Handle map instructions from state if we haven't processed them yet
+        if state_id not in processed_states and "frontend_actions" in state and state["frontend_actions"]:
+            frontend_actions = state["frontend_actions"]
+            processed_states.add(state_id)
+            
             for action in frontend_actions:
                 instruction_count += 1
                 # Format the instruction as JSON for the frontend
@@ -103,5 +117,17 @@ async def stream_geo_chat(messages: List[Dict[str, Any]], mapState: Dict[str, An
                 # This marker helps the frontend identify instructions vs regular text
                 yield f"INSTRUCTION:{instruction_json}"
                 print(f"Instruction yielded")
+        
+        data = response.get("data", {})
+        chunk_obj = data.get("chunk")
+        
+        # Handle regular message chunks
+        try:
+            if chunk_obj and hasattr(chunk_obj, 'content') and chunk_obj.content != "":
+                chunk_count += 1
+                print(f"Yielding text chunk #{chunk_count}: {chunk_obj.content[:30]}...")
+                yield chunk_obj.content
+        except Exception as e:
+            print(f"Error yielding text chunk: {e}")
     
     print(f"Stream complete: {chunk_count} text chunks, {instruction_count} instructions")

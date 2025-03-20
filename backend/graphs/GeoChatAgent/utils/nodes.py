@@ -187,8 +187,13 @@ def instructions(state: GraphState):
         print(f"SET_CENTER instruction created: {instruct}")
         print(f"Instruction data: {instruct.data}")
         
-        # Add to frontend actions
-        state["frontend_actions"] = [instruct]  # Replace any existing actions
+        # Initialize frontend_actions if not already present
+        if "frontend_actions" not in state:
+            state["frontend_actions"] = []
+        
+        # Clear existing actions and add this one
+        state["frontend_actions"] = []
+        state["frontend_actions"].append(instruct)
         
     elif next_action == MapBoxActions.SET_ZOOM:
         system_content = """You are going to set the zoom level of the map.
