@@ -17,3 +17,12 @@ class MapBoxInstruction(BaseModel):
 class GeoChatResponse(BaseModel):
     ai_message: str = Field(description="Response from the AI model")
     mapbox_instruction: MapBoxInstruction = Field(default_factory=MapBoxInstruction, description="Instruction to be performed on the mapbox in the frontend")
+
+
+class AvailableSteps(Enum):
+    CHAT_AGENT = "CHAT_AGENT"
+    MAPBOX_INSTRUCTIONS = "MAPBOX_INSTRUCTIONS"
+
+
+class RouteUserMessage(BaseModel):
+    route: AvailableSteps = Field(description="Route to the next step")
