@@ -9,6 +9,10 @@ class MapBoxActions(Enum):
     NONE = "NONE"
 
 
+class MapBoxActionList(BaseModel):
+    actions: list[MapBoxActions] = Field(default_factory=list)
+
+
 class MapBoxInstruction(BaseModel):
     action: MapBoxActions = Field(default=MapBoxActions.NONE, description="Action to be performed on the mapbox in the frontend") 
     data: dict = Field(default_factory={})
