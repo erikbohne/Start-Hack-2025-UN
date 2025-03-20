@@ -7,9 +7,109 @@ import 'mapbox-gl/dist/mapbox-gl.css';
 export default function Map() {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<mapboxgl.Map | null>(null);
-  const userInteracting = useRef<boolean>(false);
-  const spinEnabled = useRef<boolean>(true);
+  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [error, setError] = useState<string | null>(null);
+  const [is3DMode, setIs3DMode] = useState<boolean>(false); // Toggle for 2D/3D mode
+  const [dataControlsExpanded, setDataControlsExpanded] =
+    useState<boolean>(true); // Control panel expansion state
 
+  // Animation state
+  const [animating, setAnimating] = useState<boolean>(false);
+  const [displayYear, setDisplayYear] = useState<number | null>(null);
+  const animationTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const animationSpeed = useRef<number>(2000); // 2 seconds per year by default
+
+  // Data management
+  const cachedGeojsonData = useRef<{ [key: string]: any }>({});
+  const yearSequence = useRef<number[]>([]);
+  const currentYearIndexRef = useRef<number>(0);
+  const datasetCountryCombo = useRef<{ dataset: string; country: string }[]>(
+    []
+  );
+  const activeLayers = useRef<string[]>([]);
+  const mapIsReady = useRef<boolean>(false);
+
+  // Data filters
+  const [thresholdValues, setThresholdValues] = useState<{
+    [dataset: string]: number;
+  }>({
+    PopDensity: 0,
+    Precipitation: 0,
+  });
+
+  // Range information for datasets
+  const datasetRanges = useRef<{
+    [dataset: string]: { min: number; max: number };
+  }>({
+    PopDensity: { min: 0, max: 100 },
+    Precipitation: { min: 0, max: 1000 },
+  });
+
+  // Handle toggling between 2D and 3D mode
+  const toggle3DMode = useCallback(() => {
+    setIs3DMode((prev) => !prev);
+
+    // Need to recreate the map when changing projections
+    if (map.current) {
+      // Store current state
+      const center = map.current.getCenter();
+      const zoom = map.current.getZoom();
+
+      // Remove existing map
+      map.current.remove();
+      map.current = null;
+
+      // Will be recreated on next render with new projection
+      setTimeout(() => {
+        if (!mapContainer.current) return;
+
+        map.current = new mapboxgl.Map({
+          container: mapContainer.current,
+          style: "mapbox://styles/adis123/cm2trla51000q01qw78sv431j",
+          projection: !is3DMode ? "globe" : "mercator", // Toggle to opposite of current state
+          zoom: zoom,
+          center: center,
+          attributionControl: true,
+          maxZoom: 10,
+          renderWorldCopies: false,
+        }); 
+
+        const mapInstance = map.current;
+
+        mapInstance.on("load", () => {
+          console.log("Map recreated successfully");
+          // Add fog if switching to 3D mode
+          if (!is3DMode) {
+            // Using !is3DMode because state hasn't updated yet
+            mapInstance.setFog({});
+          }
+          mapIsReady.current = true;
+
+          // Reload current layers if any
+          if (
+            yearSequence.current.length > 0 &&
+            datasetCountryCombo.current.length > 0
+          ) {
+            // Use existing filter settings
+            loadGeoData(
+              datasetCountryCombo.current
+                .map((item) => item.dataset)
+                .filter((v, i, a) => a.indexOf(v) === i) as DatasetType[],
+              datasetCountryCombo.current
+                .map((item) => item.country)
+                .filter((v, i, a) => a.indexOf(v) === i) as CountryType[],
+              yearSequence.current
+            );
+          }
+        });
+
+        mapInstance.addControl(new mapboxgl.NavigationControl());
+        mapInstance.scrollZoom.enable();
+      }, 100);
+    }
+  }, [is3DMode]);
+
+  // Initialize the map
   useEffect(() => {
     if (map.current || !mapContainer.current) return;
 
