@@ -417,7 +417,7 @@ export function VercelV0Chat() {
     }, [mapContext]);
 
     return (
-        <div className={`flex flex-col h-full bg-white/30 backdrop-blur-sm text-black transition-all duration-300 transform ${
+        <div className={`flex flex-col h-full w-80 bg-white/30 backdrop-blur-sm text-black transition-all duration-300 transform ${
             isChatExpanded ? 'translate-x-0' : 'translate-x-[calc(100%-40px)]'
         }`}>
             <button
