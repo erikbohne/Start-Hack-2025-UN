@@ -11,6 +11,57 @@ Key features:
 - 2D/3D view toggle
 - Data filtering controls
 
+## Environment Setup
+
+### Frontend Environment Variables
+1. Navigate to the `frontend` directory
+2. Copy `.env.local.example` to `.env.local`:
+   ```bash
+   cp .env.local.example .env.local
+   ```
+3. Fill in the environment variables:
+   - `GROQ_API_KEY`: Get your API key from [Groq](https://console.groq.com)
+     - Required for the GeoChatAgent to process natural language queries
+     - Uses the llama3-70b-8192 model for optimal performance
+   - `NEXT_PUBLIC_MAPBOX_TOKEN`: Get your token from [Mapbox](https://account.mapbox.com/access-tokens/)
+     - Required for displaying interactive maps and geospatial data
+
+### Backend Environment Variables
+1. Navigate to the `backend` directory
+2. Copy `.env.example` to `.env`:
+   ```bash
+   cp .env.example .env
+   ```
+3. Configure the variables:
+   - `DATASET_PATH`: Path to the directory containing the geospatial data
+     - Default value: "vectorized/"
+     - Expected directory structure:
+       ```
+       vectorized/
+       ├── Africa/
+           ├── PopDensity/
+           │   ├── Burkina_Faso/
+           │   ├── Chad/
+           │   ├── Mali/
+           │   ├── Mauritania/
+           │   ├── Niger/
+           │   ├── Senegal/
+           │   └── Sudan/
+           └── Precipitation/
+               ├── Burkina_Faso/
+               ├── Chad/
+               ├── Mali/
+               ├── Mauritania/
+               ├── Niger/
+               ├── Senegal/
+               └── Sudan/
+       ```
+     - File naming conventions:
+       - Population Density: `{country_code}_pd_{year}_1km_UNadj.geojson`
+       - Precipitation: `Precipitation_{country_name}_{year}.geojson`
+
+**Note**: Never commit your actual `.env` or `.env.local` files to version control. They contain sensitive information and should be kept private.
+
 ## Map-Chat Integration
 
 The map and chat components are integrated via a Context API that allows:
