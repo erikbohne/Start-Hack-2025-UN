@@ -4,7 +4,7 @@ import { useEffect, useCallback } from "react";
 import mapboxgl from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
 import { fetchGeoData, fetchGeoJSON } from "@/lib/api";
-import { DatasetType, CountryType, GeoDataResponse } from "@/lib/types";
+import { DatasetType, CountryType, RegionType, GeoDataResponse } from "@/lib/types";
 import DataControls from "./DataControls";
 import { useMapContext } from "@/lib/MapContext";
 
@@ -67,7 +67,7 @@ export default function Map() {
           zoom: zoom,
           center: center,
           attributionControl: true,
-          maxZoom: 10,
+          maxZoom: 50,
           renderWorldCopies: false,
         }); 
 
@@ -88,15 +88,38 @@ export default function Map() {
             datasetCountryCombo.current.length > 0
           ) {
             // Use existing filter settings
-            loadGeoData(
-              datasetCountryCombo.current
-                .map((item) => item.dataset)
-                .filter((v, i, a) => a.indexOf(v) === i) as DatasetType[],
-              datasetCountryCombo.current
+            // Extract unique datasets
+            const uniqueDatasets = datasetCountryCombo.current
+              .map((item) => item.dataset)
+              .filter((v, i, a) => a.indexOf(v) === i) as DatasetType[];
+            
+            // Determine if we're in region mode by checking the first item
+            const isRegionMode = datasetCountryCombo.current.length > 0 && 'region' in datasetCountryCombo.current[0];
+            
+            if (isRegionMode) {
+              // Extract unique regions
+              const uniqueRegions = datasetCountryCombo.current
+                .map((item) => item.region)
+                .filter((v): v is RegionType => v !== undefined);
+              
+              loadGeoData(
+                uniqueDatasets,
+                [], // Empty countries array
+                yearSequence.current,
+                uniqueRegions
+              );
+            } else {
+              // Extract unique countries
+              const uniqueCountries = datasetCountryCombo.current
                 .map((item) => item.country)
-                .filter((v, i, a) => a.indexOf(v) === i) as CountryType[],
-              yearSequence.current
-            );
+                .filter((v): v is CountryType => v !== undefined);
+              
+              loadGeoData(
+                uniqueDatasets,
+                uniqueCountries,
+                yearSequence.current
+              );
+            }
           }
         });
 
@@ -211,6 +234,9 @@ export default function Map() {
           string[]
         >;
         const datasetsToShow = yearDatasetMap?.[yearToShow] || [];
+        
+        // Debug what datasets should be shown for this year
+        console.log(`For year ${yearToShow}, should show datasets:`, datasetsToShow);
 
         // Batch operations to minimize render cycles
         const hideOps: (() => void)[] = [];
@@ -219,7 +245,7 @@ export default function Map() {
 
         // Process all active layers
         activeLayers.current.forEach((layerId) => {
-          // Extract year from layerId (format: dataset-country-year)
+          // Extract year from layerId (format: dataset-country-year or dataset-region-region-year)
           const parts = layerId.split("-");
           const layerYear =
             parts.length > 2 ? parseInt(parts[parts.length - 1]) : -1;
@@ -231,12 +257,22 @@ export default function Map() {
               layerId,
               "visibility"
             );
+            // Reconstruct the key exactly as it was stored in yearDatasetMap
             const datasetCountryKey = parts
               .slice(0, parts.length - 1)
               .join("-");
             const shouldBeVisible = datasetsToShow.includes(datasetCountryKey);
+            
+            // Debug visibility determination
+            console.log(`Layer ${layerId} for year ${yearToShow}:`, { 
+              visibility, 
+              datasetCountryKey,
+              shouldBeVisible,
+              datasetsInYear: datasetsToShow
+            });
 
             if (visibility === "none" && shouldBeVisible) {
+              console.log(`Making layer ${layerId} visible`);
               showOps.push(() =>
                 map.current?.setLayoutProperty(layerId, "visibility", "visible")
               );
@@ -333,13 +369,14 @@ export default function Map() {
   const loadGeoData = async (
     datasets: DatasetType[],
     countries: CountryType[],
-    years: number[]
+    years: number[],
+    regions: RegionType[] = []
   ) => {
     if (
       !map.current ||
       !mapIsReady.current ||
       !datasets.length ||
-      !countries.length ||
+      (!countries.length && !regions.length) ||
       !years.length
     ) {
       console.error("Map not ready or invalid parameters");
@@ -360,18 +397,32 @@ export default function Map() {
       currentYearIndexRef.current = 0;
 
       datasetCountryCombo.current = [];
-      datasets.forEach((dataset) => {
-        countries.forEach((country) => {
-          datasetCountryCombo.current.push({
-            dataset: dataset,
-            country: country,
+      
+      // Handle either countries or regions based on what's provided
+      if (regions && regions.length > 0) {
+        datasets.forEach((dataset) => {
+          regions.forEach((region) => {
+            datasetCountryCombo.current.push({
+              dataset: dataset,
+              region: region,
+            });
           });
         });
-      });
+      } else {
+        datasets.forEach((dataset) => {
+          countries.forEach((country) => {
+            datasetCountryCombo.current.push({
+              dataset: dataset,
+              country: country,
+            });
+          });
+        });
+      }
 
       const geoDataResponse: GeoDataResponse = await fetchGeoData({
         datasets,
         countries,
+        regions: regions || [],
         years,
       });
 
@@ -386,12 +437,22 @@ export default function Map() {
         }
 
         for (const dataset of Object.keys(geoDataResponse[year])) {
-          for (const country of Object.keys(geoDataResponse[year][dataset])) {
-            const fileUrl = geoDataResponse[year][dataset][country];
+          for (const entityKey of Object.keys(geoDataResponse[year][dataset])) {
+            // entityKey is either a country or a region name depending on what was requested
+            const fileUrl = geoDataResponse[year][dataset][entityKey];
+            
             if (fileUrl && !fileUrl.startsWith("Error:")) {
-              const layerId = `${dataset}-${country}-${year}`;
+              // Create a layer ID. For regions, include 'region' in the ID to differentiate
+              const isRegion = regions && regions.length > 0;
+              const layerId = isRegion 
+                ? `${dataset}-region-${entityKey}-${year}` 
+                : `${dataset}-${entityKey}-${year}`;
+              
               layersToKeep.add(layerId);
-              yearDatasets[year].push(`${dataset}-${country}`);
+              // Store with the correct prefix format to match the layer ID structure
+              const datasetKey = isRegion ? `${dataset}-region-${entityKey}` : `${dataset}-${entityKey}`;
+              yearDatasets[year].push(datasetKey);
+              
               if (!cachedGeojsonData.current[fileUrl]) {
                 const fetchPromise = (async () => {
                   try {
@@ -434,10 +495,17 @@ export default function Map() {
 
       for (const year of Object.keys(geoDataResponse).map(Number)) {
         for (const dataset of Object.keys(geoDataResponse[year])) {
-          for (const country of Object.keys(geoDataResponse[year][dataset])) {
-            const fileUrl = geoDataResponse[year][dataset][country];
+          for (const entityKey of Object.keys(geoDataResponse[year][dataset])) {
+            // entityKey is either a country or a region name depending on what was requested
+            const fileUrl = geoDataResponse[year][dataset][entityKey];
+            
             if (fileUrl && !fileUrl.startsWith("Error:")) {
-              const layerId = `${dataset}-${country}-${year}`;
+              // Create a layer ID. For regions, include 'region' in the ID to differentiate
+              const isRegion = regions && regions.length > 0;
+              const layerId = isRegion 
+                ? `${dataset}-region-${entityKey}-${year}` 
+                : `${dataset}-${entityKey}-${year}`;
+              
               if (map.current?.getLayer(layerId)) {
                 continue;
               }
@@ -485,10 +553,16 @@ export default function Map() {
                   }
 
                   if (!map.current?.getSource(layerId)) {
-                    map.current?.addSource(layerId, {
-                      type: "geojson",
-                      data: geojson as unknown,
-                    });
+                    console.log(`Adding source for ${layerId}, features: ${geojson?.features?.length || 0}`);
+                    try {
+                      map.current?.addSource(layerId, {
+                        type: "geojson",
+                        data: geojson as unknown,
+                      });
+                      console.log(`Successfully added source for ${layerId}`);
+                    } catch (err) {
+                      console.error(`Error adding source for ${layerId}:`, err);
+                    }
                   }
 
                   if (dataset === "PopDensity") {
@@ -563,7 +637,7 @@ export default function Map() {
 
                     const content = `<div style="font-size:12px">
                       <strong>${dataset} (${year})</strong><br/>
-                      Country: ${country.replace("_", " ")}<br/>
+                      Location: ${entityKey.replace(/_/g, " ")}<br/>
                       Value: ${dn}
                     </div>`;
 
@@ -582,7 +656,7 @@ export default function Map() {
                   });
                 } catch (error) {
                   console.error(
-                    `Error loading GeoJSON for ${dataset} ${country} ${year}:`,
+                    `Error loading GeoJSON for ${dataset} ${entityKey} ${year}:`,
                     error
                   );
                 }
@@ -595,13 +669,16 @@ export default function Map() {
 
       await Promise.all(layerPromises);
 
+      // Store and log the year dataset map for debugging
       (window as unknown).yearDatasetMap = yearDatasets;
+      console.log('Year dataset map:', yearDatasets);
 
       if (activeLayers.current.length === 0) {
         setError("No valid data found for the selected filters");
       } else {
         if (yearSequence.current.length > 0) {
           const firstYear = yearSequence.current[0];
+          console.log(`Setting initial year to ${firstYear}. Active layers:`, activeLayers.current);
           updateVisibleYear(firstYear);
         }
       }
@@ -617,6 +694,7 @@ export default function Map() {
   const handleApplyFilters = (filters: {
     datasets: DatasetType[];
     countries: CountryType[];
+    regions: RegionType[];
     years: number[];
     thresholds?: {
       [dataset: string]: number;
@@ -629,7 +707,7 @@ export default function Map() {
       );
     }
 
-    loadGeoData(filters.datasets, filters.countries, filters.years);
+    loadGeoData(filters.datasets, filters.countries, filters.years, filters.regions);
   };
 
   return (
@@ -893,6 +971,16 @@ export default function Map() {
         <div className="text-gray-700">Active year: {displayYear}</div>
         <div className="text-gray-700">Years: {yearSequence.current.join(", ")}</div>
         <div className="text-gray-700">Animation: {animating ? "On" : "Off"}</div>
+        <div className="text-gray-700">Mode: {datasetCountryCombo.current.some(item => item.region) ? 'Region' : 'Country'}</div>
+        <details>
+          <summary className="text-gray-700 cursor-pointer">Active layers</summary>
+          <div className="text-gray-700 max-h-40 overflow-y-auto text-xs">
+            {activeLayers.current.slice(0, 5).map((layer, i) => (
+              <div key={i}>{layer}</div>
+            ))}
+            {activeLayers.current.length > 5 && <div>...and {activeLayers.current.length - 5} more</div>}
+          </div>
+        </details>
       </div>
 
       {/* Error message */}

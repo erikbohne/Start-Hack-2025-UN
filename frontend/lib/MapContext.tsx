@@ -33,7 +33,7 @@ interface MapContextType {
   cachedGeojsonData: React.RefObject<{ [key: string]: any }>;
   yearSequence: React.RefObject<number[]>;
   currentYearIndexRef: React.RefObject<number>;
-  datasetCountryCombo: React.RefObject<{ dataset: string; country: string }[]>;
+  datasetCountryCombo: React.RefObject<Array<{ dataset: string; country?: string; region?: string }>>;
   activeLayers: React.RefObject<string[]>;
   
   // Thresholds and ranges
@@ -49,10 +49,11 @@ interface MapContextType {
   toggleAnimation: () => void;
   changeAnimationSpeed: (speedMs: number) => void;
   handleThresholdChange: (dataset: string, value: number) => void;
-  loadGeoData: (datasets: DatasetType[], countries: CountryType[], years: number[]) => Promise<void>;
+  loadGeoData: (datasets: DatasetType[], countries: CountryType[], years: number[], regions?: string[]) => Promise<void>;
   handleApplyFilters: (filters: {
     datasets: DatasetType[];
     countries: CountryType[];
+    regions: string[];
     years: number[];
     thresholds?: { [dataset: string]: number };
   }) => void;
@@ -82,7 +83,7 @@ export const MapProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const cachedGeojsonData = useRef<{ [key: string]: any }>({});
   const yearSequence = useRef<number[]>([]);
   const currentYearIndexRef = useRef<number>(0);
-  const datasetCountryCombo = useRef<{ dataset: string; country: string }[]>([]);
+  const datasetCountryCombo = useRef<Array<{ dataset: string; country?: string; region?: string }>>([]);
   const activeLayers = useRef<string[]>([]);
   const mapIsReady = useRef<boolean>(false);
 
@@ -139,10 +140,11 @@ export const MapProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const loadGeoData = async (
     datasets: DatasetType[],
     countries: CountryType[],
-    years: number[]
+    years: number[],
+    regions: string[] = []
   ) => {
     // Stub implementation that will be overridden by Map component
-    console.log("loadGeoData called with:", {datasets, countries, years});
+    console.log("loadGeoData called with:", {datasets, countries, regions, years});
     console.log("This function will be implemented by the Map component");
     
     // Set some basic state to show it was called
@@ -150,14 +152,26 @@ export const MapProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     currentYearIndexRef.current = 0;
     
     datasetCountryCombo.current = [];
-    datasets.forEach(dataset => {
-      countries.forEach(country => {
-        datasetCountryCombo.current.push({
-          dataset,
-          country
+    
+    if (regions && regions.length > 0) {
+      datasets.forEach(dataset => {
+        regions.forEach(region => {
+          datasetCountryCombo.current.push({
+            dataset,
+            region
+          });
         });
       });
-    });
+    } else {
+      datasets.forEach(dataset => {
+        countries.forEach(country => {
+          datasetCountryCombo.current.push({
+            dataset,
+            country
+          });
+        });
+      });
+    }
     
     if (years.length > 0) {
       setDisplayYear(years[0]);
@@ -167,13 +181,19 @@ export const MapProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const handleApplyFilters = (filters: {
     datasets: DatasetType[];
     countries: CountryType[];
+    regions: string[];
     years: number[];
     thresholds?: { [dataset: string]: number };
   }) => {
     if (filters.thresholds) {
       setThresholdValues(filters.thresholds);
     }
-    loadGeoData(filters.datasets, filters.countries, filters.years);
+    loadGeoData(
+      filters.datasets, 
+      filters.countries, 
+      filters.years,
+      filters.regions
+    );
   };
 
   const handleYearSelection = (index: number) => {

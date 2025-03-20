@@ -1,12 +1,13 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { DatasetType, CountryType } from '@/lib/types';
+import { DatasetType, CountryType, RegionType } from '@/lib/types';
 
 interface DataControlsProps {
   onApplyFilters: (filters: {
     datasets: DatasetType[];
     countries: CountryType[];
+    regions: RegionType[];
     years: number[];
     thresholds?: {
       [dataset: string]: number;
@@ -44,12 +45,31 @@ export default function DataControls({
 }: ExtendedDataControlsProps) {
   const [selectedDatasets, setSelectedDatasets] = useState<DatasetType[]>(['PopDensity']);
   const [selectedCountries, setSelectedCountries] = useState<CountryType[]>(['Mali']);
+  const [selectedRegions, setSelectedRegions] = useState<RegionType[]>([]);
   const [selectedYears, setSelectedYears] = useState<number[]>([2015]);
   
   const [showThresholds, setShowThresholds] = useState<boolean>(false);
   const [localThresholds, setLocalThresholds] = useState<{
     [dataset: string]: number;
   }>(thresholdValues);
+  const [viewMode, setViewMode] = useState<'countries' | 'regions'>('countries');
+
+  // Reset selections when switching view modes
+  useEffect(() => {
+    if (viewMode === 'countries') {
+      setSelectedRegions([]);
+      if (selectedCountries.length === 0) {
+        setSelectedCountries(['Mali']); // Default country
+      }
+    } else {
+      setSelectedCountries([]);
+      if (selectedRegions.length === 0) {
+        // Select the first available region if none is selected
+        const allRegions: RegionType[] = ['Assaba_Hodh_El_Gharbi_Tagant', 'Sahel_Est_Centre-Est'];
+        setSelectedRegions([allRegions[0]]);
+      }
+    }
+  }, [viewMode]);
   
   // Update local state when external selections change
   useEffect(() => {
@@ -110,6 +130,15 @@ export default function DataControls({
     );
   };
 
+  // Handle toggling a region selection
+  const toggleRegion = (region: RegionType) => {
+    setSelectedRegions(prev => 
+      prev.includes(region)
+        ? prev.filter(r => r !== region)
+        : [...prev, region]
+    );
+  };
+
   // Handle toggling a year selection
   const toggleYear = (year: number) => {
     setSelectedYears(prev => 
@@ -152,11 +181,15 @@ export default function DataControls({
   const handleApply = () => {
     onApplyFilters({
       datasets: selectedDatasets,
-      countries: selectedCountries,
+      countries: viewMode === 'countries' ? selectedCountries : [],
+      regions: viewMode === 'regions' ? selectedRegions : [],
       years: selectedYears,
       thresholds: localThresholds
     });
   };
+
+  // Define all available regions
+  const regionOptions: RegionType[] = ['Assaba_Hodh_El_Gharbi_Tagant', 'Sahel_Est_Centre-Est'];
 
   return (
     <div className="p-4 max-w-md bg-white rounded-lg shadow-lg">
@@ -181,24 +214,79 @@ export default function DataControls({
         </div>
       </div>
       
+      {/* View mode toggle */}
       <div className="mb-4">
-        <h3 className="font-medium mb-1 text-gray-700">Countries</h3>
-        <div className="flex flex-wrap gap-2">
-          {countryOptions.map(country => (
-            <button
-              key={country}
-              onClick={() => toggleCountry(country)}
-              className={`px-3 py-1 rounded-full text-sm ${
-                selectedCountries.includes(country)
-                  ? 'bg-blue-500 text-white'
-                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-              } transition-colors duration-200`}
-            >
-              {country.replace('_', ' ')}
-            </button>
-          ))}
+        <div className="flex items-center justify-center gap-2 bg-gray-100 p-1 rounded-lg">
+          <button
+            onClick={() => setViewMode('countries')}
+            className={`flex-1 py-2 rounded-md text-sm font-medium ${
+              viewMode === 'countries'
+                ? 'bg-blue-500 text-white'
+                : 'bg-transparent text-gray-700 hover:bg-gray-200'
+            } transition-colors duration-200`}
+          >
+            Countries
+          </button>
+          <button
+            onClick={() => setViewMode('regions')}
+            className={`flex-1 py-2 rounded-md text-sm font-medium ${
+              viewMode === 'regions'
+                ? 'bg-blue-500 text-white'
+                : 'bg-transparent text-gray-700 hover:bg-gray-200'
+            } transition-colors duration-200`}
+          >
+            Regions
+          </button>
         </div>
       </div>
+      
+      {/* Show countries selector when in countries mode */}
+      {viewMode === 'countries' && (
+        <div className="mb-4">
+          <h3 className="font-medium mb-1 text-gray-700">Countries</h3>
+          <div className="flex flex-wrap gap-2">
+            {countryOptions.map(country => (
+              <button
+                key={country}
+                onClick={() => toggleCountry(country)}
+                className={`px-3 py-1 rounded-full text-sm ${
+                  selectedCountries.includes(country)
+                    ? 'bg-blue-500 text-white'
+                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                } transition-colors duration-200`}
+              >
+                {country.replace(/_/g, ' ')}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+      
+      {/* Show regions selector when in regions mode */}
+      {viewMode === 'regions' && (
+        <div className="mb-4">
+          <h3 className="font-medium mb-1 text-gray-700">Regions</h3>
+          <div className="flex flex-wrap gap-2">
+            {regionOptions.map(region => (
+              <button
+                key={region}
+                onClick={() => toggleRegion(region)}
+                className={`px-3 py-1 rounded-full text-sm ${
+                  selectedRegions.includes(region)
+                    ? 'bg-blue-500 text-white'
+                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                } transition-colors duration-200`}
+              >
+                {region.replace(/_/g, ' ')}
+              </button>
+            ))}
+          </div>
+          <div className="mt-2 text-xs text-gray-500">
+            <p>Mauritania: Assaba Hodh El Gharbi Tagant</p>
+            <p>Burkina Faso: Sahel Est Centre-Est</p>
+          </div>
+        </div>
+      )}
       
       <div className="mb-4">
         <h3 className="font-medium mb-1 text-gray-700">Years</h3>
