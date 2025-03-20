@@ -75,15 +75,9 @@ async def stream_geo_chat(messages: List[Dict[str, Any]], mapState: Dict[str, An
         "map_context": map_state_description if mapState else None
     }
     
-    # Track if we've already processed instructions from the current state
-    processed_states = set()
-    
     async for response in graph.astream_events(
         initial_state, version="v2"
     ):
-        # Get the full state to check for frontend actions
-        state = response.get("state", {})
-        state_id = id(state)  # Use object id to track if we've seen this state
         
         data = response.get("data", {})
 
@@ -96,48 +90,8 @@ async def stream_geo_chat(messages: List[Dict[str, Any]], mapState: Dict[str, An
             }
             instruction_json = json.dumps(instruction)
             yield f"INSTRUCTION:{instruction_json}"
+            print(f"Yielding instruction #{instruction_count}: {instruction_json}")
             continue
-
-        # Handle map instructions from state if we haven't processed them yet
-        if state_id not in processed_states and "frontend_actions" in state and state["frontend_actions"]:
-            frontend_actions = state["frontend_actions"]
-            processed_states.add(state_id)
-            
-            for action in frontend_actions:
-                instruction_count += 1
-                # Format the instruction as JSON for the frontend
-                instruction = {
-                    "type": "instruction",
-                    "action": action.action.value,
-                    "data": action.data
-                }
-                
-                instruction_json = json.dumps(instruction)
-                print(f"Yielding instruction #{instruction_count}: {instruction_json}")
-                
-                # Yield the instruction as a JSON string prefixed with INSTRUCTION:
-                # This marker helps the frontend identify instructions vs regular text
-                yield f"INSTRUCTION:{instruction_json}"
-                print(f"Instruction yielded")
-                
-                # If it's an ANALYZE_DATA instruction, run the analyze_data node directly
-                if instruction["action"] == "ANALYZE_DATA":
-                    print("Running data analysis...")
-                    # Create a temporary state for analysis
-                    analysis_state = {
-                        "messages": state["messages"],
-                        "map_context": state.get("map_context")
-                    }
-                    
-                    # Run the analyze_data function
-                    from graphs.GeoChatAgent.utils.nodes import analyze_data
-                    analysis_result = analyze_data(analysis_state)
-                    
-                    # Get the analysis message
-                    if analysis_result and "messages" in analysis_result and analysis_result["messages"]:
-                        analysis_content = analysis_result["messages"][0].content
-                        print(f"Analysis complete, yielding results...")
-                        yield analysis_content
         
         data = response.get("data", {})
         chunk_obj = data.get("chunk")
@@ -146,7 +100,7 @@ async def stream_geo_chat(messages: List[Dict[str, Any]], mapState: Dict[str, An
         try:
             if chunk_obj and hasattr(chunk_obj, 'content') and chunk_obj.content != "":
                 chunk_count += 1
-                print(f"Yielding text chunk #{chunk_count}: {chunk_obj.content[:30]}...")
+                # print(f"Yielding text chunk #{chunk_count}: {chunk_obj.content[:30]}...")
                 yield chunk_obj.content
         except Exception as e:
             print(f"Error yielding text chunk: {e}")

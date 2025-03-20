@@ -325,6 +325,11 @@ export function VercelV0Chat() {
                 return "I tried to set the zoom level, but couldn't get valid parameters.";
             }
             
+            if (instructionData.action === 'ANALYZE_DATA') {
+                console.log("Processing ANALYZE_DATA instruction");
+                return "Analyzing the current map data...";
+            }
+            
             if (instructionData.action === 'SET_GEOJSON' && instructionData.data) {
                 console.log("Processing SET_GEOJSON instruction:", instructionData.data);
                 

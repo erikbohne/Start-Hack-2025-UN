@@ -285,18 +285,67 @@ def instructions(state: GraphState):
     print(f"User message: {user_message}")
     
     if next_action == MapBoxActions.ANALYZE_DATA:
-        # Create an instruction for data analysis
-        instruct = MapBoxInstruction(
+        # Extract any country mentions from the user message for center action
+        user_message = state["messages"][-1].content if state["messages"] else ""
+        
+        # Extract map context country information
+        active_countries = []
+        if state.get("map_context"):
+            map_context = state["map_context"]
+            for line in map_context.split('\n'):
+                if "Countries shown:" in line:
+                    countries_text = line.split("Countries shown:")[1].strip()
+                    active_countries = [c.strip() for c in countries_text.split(',')]
+        
+        # Country coordinates
+        country_coords = {
+            "Burkina_Faso": [-1.561593, 12.364637],
+            "Burkina Faso": [-1.561593, 12.364637],
+            "Chad": [18.732207, 15.454166],
+            "Mali": [-3.996166, 17.570692],
+            "Mauritania": [-10.940835, 21.00789],
+            "Niger": [8.081666, 17.607789],
+            "Senegal": [-14.452362, 14.497401],
+            "Sudan": [30.217636, 12.862807]
+        }
+        
+        # Try to identify the most relevant country
+        target_country = None
+        
+        # First, check if a specific country is mentioned in the user message
+        for country in country_coords.keys():
+            if country.lower().replace("_", " ") in user_message.lower():
+                target_country = country
+                break
+        
+        # If no country in message, use the first active country
+        if not target_country and active_countries and len(active_countries) > 0:
+            target_country = active_countries[0]
+        
+        # Create a CENTER instruction if we have a target country
+        if target_country and target_country in country_coords:
+            center_instruct = MapBoxInstruction(
+                action=MapBoxActions.SET_CENTER,
+                data={
+                    "center": country_coords[target_country],
+                    "zoom": 4  # Zoomed out enough to show country context
+                }
+            )
+            state["frontend_actions"].append(center_instruct)
+        
+        # Add the analysis instruction after the center instruction
+        analyze_instruct = MapBoxInstruction(
             action=MapBoxActions.ANALYZE_DATA,
             data={}
         )
-        state["frontend_actions"].append(instruct)
+        state["frontend_actions"].append(analyze_instruct)
         
         # Generate a response about the analysis
         system_content = """You are a helpful Geography assistant.
             The system is now performing a data analysis on the currently displayed map data.
             
             Tell the user that you are analyzing the data and they will receive insights shortly.
+            If a specific country is being analyzed, mention it by name.
             Keep your response brief and focused.
             """
             
