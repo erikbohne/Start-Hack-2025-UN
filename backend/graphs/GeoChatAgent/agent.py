@@ -1,8 +1,8 @@
 from langgraph.graph import START, END, StateGraph
 from typing import List, Dict, Any, AsyncGenerator
-from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
+from langchain_core.messages import HumanMessage, AIMessage
 from graphs.GeoChatAgent.utils.state import GraphState
-from graphs.GeoChatAgent.utils.nodes import route_user_message, chat_agent, instructions, create_instructions
+from graphs.GeoChatAgent.utils.nodes import route_user_message, chat_agent, instructions, create_instructions, analyze_data
 from graphs.GeoChatAgent.utils.models import MapBoxInstruction
 import json
 
@@ -11,10 +11,12 @@ workflow = StateGraph(GraphState)
 workflow.add_node("chat_agent", chat_agent)
 workflow.add_node("create_instructions", create_instructions)
 workflow.add_node("instructions", instructions)
+workflow.add_node("analyze_data", analyze_data)
 
 workflow.add_edge("chat_agent", END)
 workflow.add_edge("create_instructions", "instructions")
-workflow.add_edge("instructions", "chat_agent")
+workflow.add_edge("instructions", END)
+workflow.add_edge("analyze_data", END)
 
 workflow.add_conditional_edges(START, route_user_message)
 
@@ -117,6 +119,25 @@ async def stream_geo_chat(messages: List[Dict[str, Any]], mapState: Dict[str, An
                 # This marker helps the frontend identify instructions vs regular text
                 yield f"INSTRUCTION:{instruction_json}"
                 print(f"Instruction yielded")
+                
+                # If it's an ANALYZE_DATA instruction, run the analyze_data node directly
+                if instruction["action"] == "ANALYZE_DATA":
+                    print("Running data analysis...")
+                    # Create a temporary state for analysis
+                    analysis_state = {
+                        "messages": state["messages"],
+                        "map_context": state.get("map_context")
+                    }
+                    
+                    # Run the analyze_data function
+                    from graphs.GeoChatAgent.utils.nodes import analyze_data
+                    analysis_result = analyze_data(analysis_state)
+                    
+                    # Get the analysis message
+                    if analysis_result and "messages" in analysis_result and analysis_result["messages"]:
+                        analysis_content = analysis_result["messages"][0].content
+                        print(f"Analysis complete, yielding results...")
+                        yield analysis_content
         
         data = response.get("data", {})
         chunk_obj = data.get("chunk")

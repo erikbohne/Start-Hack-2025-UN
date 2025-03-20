@@ -6,6 +6,7 @@ class MapBoxActions(Enum):
     SET_GEOJSON = "SET_GEOJSON"
     SET_CENTER = "SET_CENTER"
     SET_ZOOM = "SET_ZOOM"
+    ANALYZE_DATA = "ANALYZE_DATA"
     NONE = "NONE"
 
 
@@ -26,6 +27,7 @@ class GeoChatResponse(BaseModel):
 class AvailableSteps(Enum):
     CHAT_AGENT = "CHAT_AGENT"
     MAPBOX_INSTRUCTIONS = "MAPBOX_INSTRUCTIONS"
+    DATA_ANALYSIS = "DATA_ANALYSIS"
 
 
 class RouteUserMessage(BaseModel):

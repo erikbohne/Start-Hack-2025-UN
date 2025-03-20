@@ -2,9 +2,11 @@ from graphs.GeoChatAgent.utils.state import GraphState
 from graphs.GeoChatAgent.utils.models import AvailableSteps, RouteUserMessage, MapBoxActionList, MapBoxActions, MapBoxInstruction
 from langchain_core.messages import SystemMessage, AIMessage, HumanMessage
 from langchain_groq import ChatGroq
-from typing import Literal
+from typing import Literal, List
 from dotenv import load_dotenv
 import os
+import json
+from graphs.GeoChatAgent.utils.tools import DataAnalysisTool
 
 load_dotenv()
 
@@ -16,9 +18,9 @@ llm = ChatGroq(
 )
 
 
-def route_user_message(state: GraphState) -> Literal["chat_agent", "create_instructions"]:
-    """Routes to the chat_agent node or the instructions node."""
-    system_content = """Determine whether the user's message requires map interaction.
+def route_user_message(state: GraphState) -> Literal["chat_agent", "create_instructions", "analyze_data"]:
+    """Routes to the chat_agent node, instructions node, or data analysis node."""
+    system_content = """Determine whether the user's message requires map interaction or data analysis.
         
         Examples that require map interaction:
         - "Show me Paris on the map" (centering the map)
@@ -31,12 +33,30 @@ def route_user_message(state: GraphState) -> Literal["chat_agent", "create_instr
         - "Compare population between Chad and Mali" (loading data for comparison)
         - "Show me trends in rainfall from 2010 to 2020" (loading temporal data)
         
+        Examples that require data analysis:
+        - "Analyze the precipitation patterns in Mali"
+        - "Calculate the average population density for Chad"
+        - "Compare the population density trends between Mali and Niger"
+        - "Find the correlation between precipitation and population in Burkina Faso"
+        - "What's the statistical significance of rainfall changes in Senegal over time?"
+        - "Show me a summary of population growth in Sudan"
+        - "Give me insights about the data for Mauritania"
+        - "Analyze the trends in the displayed data"
+        
         Choose MAPBOX_INSTRUCTIONS if any map manipulation is needed. This includes:
         - Centering on locations
         - Zooming
         - Loading data (countries, datasets, years)
         - Setting thresholds
-        - Comparing data
+        - Visually comparing data
+        
+        Choose DATA_ANALYSIS if the user is asking for:
+        - Statistical analysis
+        - Data comparisons and correlations
+        - Trend analysis
+        - Summaries of data patterns
+        - Insights about the data
+        - Mathematical calculations on the data
         
         Otherwise choose CHAT_AGENT.
         """
@@ -56,6 +76,130 @@ def route_user_message(state: GraphState) -> Literal["chat_agent", "create_instr
         return "chat_agent"
     elif next.route == AvailableSteps.MAPBOX_INSTRUCTIONS:
         return "create_instructions"
+    elif next.route == AvailableSteps.DATA_ANALYSIS:
+        return "analyze_data"
+
+
+def analyze_data(state: GraphState):
+    """Analyzes data based on the user's query and map context."""
+    # Extract active datasets, countries, and years from map context
+    active_datasets = []
+    active_countries = []
+    active_years = []
+    
+    if state.get("map_context"):
+        map_context = state["map_context"]
+        
+        # Parse the map context to extract information
+        for line in map_context.split('\n'):
+            if "Active datasets:" in line:
+                datasets_text = line.split("Active datasets:")[1].strip()
+                active_datasets = [d.strip() for d in datasets_text.split(',')]
+            elif "Countries shown:" in line:
+                countries_text = line.split("Countries shown:")[1].strip()
+                active_countries = [c.strip() for c in countries_text.split(',')]
+            elif "Available years:" in line:
+                years_text = line.split("Available years:")[1].strip()
+                active_years = [int(y.strip()) for y in years_text.split(',')]
+            elif "Currently displaying year:" in line:
+                current_year_text = line.split("Currently displaying year:")[1].strip()
+                current_year = int(current_year_text)
+                if current_year not in active_years:
+                    active_years.append(current_year)
+    
+    # Get or set default values
+    if not active_datasets:
+        active_datasets = ["PopDensity", "Precipitation"]
+    if not active_countries:
+        active_countries = ["Mali", "Chad", "Niger"]  # Default selection
+    if not active_years:
+        active_years = [2015, 2016, 2017, 2018, 2019, 2020]  # Recent years
+    
+    # Normalize country names (replace spaces with underscores)
+    active_countries = [c.replace(" ", "_") for c in active_countries]
+    
+    # Collect analysis results
+    analysis_results = {
+        "statistics": {},
+        "temporal_trends": {},
+        "regional_comparisons": {},
+        "correlations": {}
+    }
+    
+    # Generate statistics for each dataset and country
+    for dataset in active_datasets:
+        for country in active_countries:
+            if active_years:
+                # Use the most recent year for statistics
+                most_recent_year = max(active_years)
+                geojson = DataAnalysisTool.get_geojson_data(dataset, country, most_recent_year)
+                
+                if geojson:
+                    values = DataAnalysisTool.extract_data_values(geojson)
+                    stats = DataAnalysisTool.calculate_statistics(values)
+                    analysis_results["statistics"][f"{dataset}_{country}_{most_recent_year}"] = stats
+    
+    # Generate temporal trends analysis
+    for dataset in active_datasets:
+        for country in active_countries:
+            if len(active_years) > 1:  # Need multiple years for trend analysis
+                trends = DataAnalysisTool.analyze_temporal_trends(dataset, country, active_years)
+                analysis_results["temporal_trends"][f"{dataset}_{country}"] = trends
+    
+    # Generate regional comparisons
+    for dataset in active_datasets:
+        if len(active_countries) > 1 and active_years:  # Need multiple countries for comparison
+            most_recent_year = max(active_years)
+            comparisons = DataAnalysisTool.compare_regions(dataset, active_countries, most_recent_year)
+            analysis_results["regional_comparisons"][f"{dataset}_{most_recent_year}"] = comparisons
+    
+    # Generate correlation analysis
+    for country in active_countries:
+        if len(active_datasets) > 1 and active_years:  # Need both datasets for correlation
+            correlations = DataAnalysisTool.analyze_correlations(country, active_years)
+            analysis_results["correlations"][country] = correlations
+    
+    # Format analysis results for LLM
+    analysis_json = json.dumps(analysis_results, indent=2)
+    
+    # Create detailed system prompt with the analysis data
+    system_content = f"""You are a data analyst specializing in geospatial data analysis for UN climate and population data.
+
+Based on the analysis of the map data, provide detailed insights in clear, non-technical language.
+
+Here is the raw analysis data to interpret:
+```json
+{analysis_json}
+```
+
+Structure your response with the following sections:
+
+1. STATISTICAL SUMMARY: Interpret key metrics (mean, median, max/min values) for each dataset and country
+2. TEMPORAL TRENDS: Explain patterns and changes over time, highlighting significant year-to-year changes
+3. REGIONAL PATTERNS: Compare data across different countries, noting which regions stand out and why
+4. RELATIONSHIPS: Describe correlations between population density and precipitation where available
+5. KEY INSIGHTS: Summarize 3-5 most important findings from the data
+6. RECOMMENDATIONS: Suggest additional data that would enhance the analysis
+
+Important:
+- Explain what the numbers mean in real-world terms
+- Note any limitations in the data or analysis
+- Use clear, non-technical language for a general audience
+- When discussing trends, be specific about the magnitude and significance of changes
+"""
+    
+    # Add map context if available
+    if state.get("map_context"):
+        system_content += f"\n\nMap context information:\n{state['map_context']}"
+        
+    system_message = SystemMessage(content=system_content)
+    
+    # Get the analysis from the LLM
+    messages = [system_message] + state["messages"]
+    analysis_response = llm.invoke(messages)
+    
+    # Return the analysis as a message
+    return {"messages": [AIMessage(content=analysis_response.content)]}
 
 
 def create_instructions(state: GraphState):
@@ -66,6 +210,7 @@ def create_instructions(state: GraphState):
         - SET_CENTER: Move the map to center on a location
         - SET_ZOOM: Change the zoom level of the map
         - SET_GEOJSON: Add data visualization to the map (countries, datasets, years)
+        - ANALYZE_DATA: Perform statistical analysis on the displayed data
         
         Examples:
         1. If the task is to "Show me Paris", you would return:
@@ -80,11 +225,20 @@ def create_instructions(state: GraphState):
         4. If the task is to "Compare rainfall in Mali and Chad from 2010 to 2015", you would return:
            [MapBoxActions.SET_GEOJSON]
            
+        5. If the task is to "Analyze the trends in population density for Mali", you would return:
+           [MapBoxActions.ANALYZE_DATA]
+           
         When to use SET_GEOJSON:
         - Whenever the user wants to see specific data (population density, precipitation)
         - When the user wants to filter data (show areas with population above 50)
         - When the user wants to compare data across regions or time
         - When the user mentions specific countries, datasets, or years
+        
+        When to use ANALYZE_DATA:
+        - When the user wants statistical analysis of the displayed data
+        - When the user wants trends, patterns, or insights from the data
+        - When the user wants to compare regions statistically
+        - When the user wants correlation analysis between datasets
         
         Convert the user's request into a sequence of map actions.
         """
@@ -130,7 +284,35 @@ def instructions(state: GraphState):
     user_message = state["messages"][-1].content.lower() if state["messages"] else ""
     print(f"User message: {user_message}")
     
-    if next_action == MapBoxActions.SET_CENTER:
+    if next_action == MapBoxActions.ANALYZE_DATA:
+        # Create an instruction for data analysis
+        instruct = MapBoxInstruction(
+            action=MapBoxActions.ANALYZE_DATA,
+            data={}
+        )
+        state["frontend_actions"].append(instruct)
+        
+        # Generate a response about the analysis
+        system_content = """You are a helpful Geography assistant.
+            The system is now performing a data analysis on the currently displayed map data.
+            
+            Tell the user that you are analyzing the data and they will receive insights shortly.
+            Keep your response brief and focused.
+            """
+            
+        # Add map context if available
+        if state.get("map_context"):
+            system_content += f"\n\n{state['map_context']}"
+        
+        system_message = SystemMessage(content=system_content)
+        
+        # Generate a response
+        llm_response = llm.invoke([system_message] + state["messages"])
+        state["messages"] = [AIMessage(content=llm_response.content)]
+        
+        return state
+    
+    elif next_action == MapBoxActions.SET_CENTER:
         # Use LLM to generate map center instruction
         system_content = """You are going to set the center of the map based on the user's query.
             You MUST return coordinates in the format [longitude, latitude].
