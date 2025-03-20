@@ -1,0 +1,37 @@
+.DS_Store
+*/visualizations
+*/geofiles
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Distribution / packaging
+dist/
+build/
+*.egg-info/
+
+# Virtual environments
+venv/
+env/
+.env/
+.venv/
+
+# Testing
+.pytest_cache/
+.coverage
+
+# IDE specific files
+.idea/
+*.swp
+*.swo
+
+# Local development settings
+.env
+.env.local
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+test.py
