@@ -10,7 +10,7 @@ class MapBoxActions(Enum):
 
 
 class MapBoxActionList(BaseModel):
-    actions: list[MapBoxActions] = Field(default_factory=list)
+    actions: list[MapBoxActions] = Field(default_factory=list, description="List of actions to be performed on the mapbox in the frontend, always zoom to a country after setting the geojson. Never fly to and zoom as two separate actions")
 
 
 class MapBoxInstruction(BaseModel):
