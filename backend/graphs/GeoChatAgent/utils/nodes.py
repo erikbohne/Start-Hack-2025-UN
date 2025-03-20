@@ -18,8 +18,7 @@ llm = ChatGroq(
 
 def route_user_message(state: GraphState) -> Literal["chat_agent", "create_instructions"]:
     """Routes to the chat_agent node or the instructions node."""
-    system_message = SystemMessage(
-        content="""Determine whether the user's message requires map interaction.
+    system_content = """Determine whether the user's message requires map interaction.
         
         Examples that require map interaction:
         - "Show me Paris on the map"
@@ -30,7 +29,12 @@ def route_user_message(state: GraphState) -> Literal["chat_agent", "create_instr
         
         Choose MAPBOX_INSTRUCTIONS if any map manipulation is needed. Otherwise choose CHAT_AGENT.
         """
-    )
+    
+    # Add map context if available
+    if state.get("map_context"):
+        system_content += f"\n\n{state['map_context']}"
+    
+    system_message = SystemMessage(content=system_content)
     
     messages = [system_message] + state["messages"]
     next = llm.with_structured_output(RouteUserMessage).invoke(messages)
@@ -44,43 +48,27 @@ def route_user_message(state: GraphState) -> Literal["chat_agent", "create_instr
 
 
 def create_instructions(state: GraphState):
-    system_prompt = SystemMessage(
-        content="""You are going to create a list of the instructions we will do to Mapbox.
-        
-        AVAILABLE MAP ACTIONS:
-        - SET_CENTER: Move the map to center on a location
-        - SET_ZOOM: Change the zoom level of the map
-        - SET_GEOJSON: Add GeoJSON data to the map
-        
-        Examples:
-        1. If the task is to "Show me Paris", you would return:
-           [MapBoxActions.SET_CENTER]
-        
-        2. If the task is to "Zoom into the Eiffel Tower", you would return:
-           [MapBoxActions.SET_CENTER, MapBoxActions.SET_ZOOM]
-        
-        3. If the task is to "Show population data for Burkina Faso", you would return:
-           [MapBoxActions.SET_CENTER, MapBoxActions.SET_GEOJSON]
-        
-        Convert the user's request into a sequence of map actions.
-        """
-    )
-
-    instructions = llm.with_structured_output(MapBoxActionList).invoke([system_prompt] + state["messages"])
+    """Creates instructions for the map based on the user's query."""
+    instructions = llm.with_structured_output(MapBoxActionList).invoke(state["messages"])
     print(f"Created instructions: {instructions.actions}")
     return {"instructions_list": instructions.actions}
 
 
 def chat_agent(state: GraphState):
-    system_message = SystemMessage(
-        content="""You are a helpful Geography assistant specializing in climate and population data from the UN.
+    system_content = """You are a helpful Geography assistant specializing in climate and population data from the UN.
         You can answer questions about population density, precipitation, and other geographical data for African countries.
         
         When the user asks about viewing locations or data on the map, make sure to answer them clearly and helpfully.
         
         Keep answers concise and focused on the user's question.
         """
-    )
+    
+    # Add map context if available
+    if state.get("map_context"):
+        system_content += f"\n\n{state['map_context']}"
+        
+    system_message = SystemMessage(content=system_content)
+    
     return {"messages": llm.with_config(tags=["answer"]).invoke([system_message] + state["messages"])}
 
 
@@ -98,8 +86,7 @@ def instructions(state: GraphState):
     
     if next_action == MapBoxActions.SET_CENTER:
         # Use LLM to generate map center instruction
-        system_message = SystemMessage(
-            content="""You are going to set the center of the map based on the user's query.
+        system_content = """You are going to set the center of the map based on the user's query.
             You MUST return coordinates in the format [longitude, latitude].
             
             Common city coordinates:
@@ -132,6 +119,15 @@ def instructions(state: GraphState):
             - Singapore: [103.8198, 1.3521]
             - Dubai: [55.2708, 25.2048]
             
+            # African countries:
+            - Burkina Faso: [-1.561593, 12.364637]
+            - Chad: [18.732207, 15.454166]
+            - Mali: [-3.996166, 17.570692]
+            - Mauritania: [-10.940835, 21.00789]
+            - Niger: [8.081666, 17.607789]
+            - Senegal: [-14.452362, 14.497401]
+            - Sudan: [30.217636, 12.862807]
+            
             Example output:
             {
               "action": "SET_CENTER",
@@ -143,7 +139,12 @@ def instructions(state: GraphState):
             
             DO NOT return string names for locations. Always use coordinates.
             """
-        )
+        
+        # Add map context if available
+        if state.get("map_context"):
+            system_content += f"\n\n{state['map_context']}"
+            
+        system_message = SystemMessage(content=system_content)
         
         # Ask LLM to generate the instruction
         instruct = llm.with_structured_output(MapBoxInstruction).invoke([system_message] + state["messages"])
@@ -153,8 +154,7 @@ def instructions(state: GraphState):
             print("Warning: LLM didn't return proper coordinates - trying again with a simpler prompt")
             
             # If the LLM fails, try a simpler prompt that's more likely to succeed
-            system_message = SystemMessage(
-                content="""Extract the location from the user's query and return its coordinates.
+            system_content = """Extract the location from the user's query and return its coordinates.
                 
                 For example, if the user asks about Paris, return:
                 {
@@ -167,7 +167,12 @@ def instructions(state: GraphState):
                 
                 Be precise with the coordinates. DO NOT add any explanations.
                 """
-            )
+                
+            # Add map context if available
+            if state.get("map_context"):
+                system_content += f"\n\n{state['map_context']}"
+                
+            system_message = SystemMessage(content=system_content)
             
             # Try one more time with a simpler prompt
             try:
@@ -186,8 +191,7 @@ def instructions(state: GraphState):
         state["frontend_actions"] = [instruct]  # Replace any existing actions
         
     elif next_action == MapBoxActions.SET_ZOOM:
-        system_message = SystemMessage(
-            content="""You are going to set the zoom level of the map.
+        system_content = """You are going to set the zoom level of the map.
             For example:
             {
               "action": "SET_ZOOM",
@@ -197,13 +201,18 @@ def instructions(state: GraphState):
             }
             Zoom levels range from 1 (world view) to 22 (street level).
             """
-        )
+            
+        # Add map context if available
+        if state.get("map_context"):
+            system_content += f"\n\n{state['map_context']}"
+            
+        system_message = SystemMessage(content=system_content)
+        
         instruct = llm.with_structured_output(MapBoxInstruction).invoke([system_message] + state["messages"])
         state["frontend_actions"].append(instruct)
         
     elif next_action == MapBoxActions.SET_GEOJSON:
-        system_message = SystemMessage(
-            content="""You are going to set GeoJSON data on the map.
+        system_content = """You are going to set GeoJSON data on the map.
             For example:
             {
               "action": "SET_GEOJSON",
@@ -226,13 +235,18 @@ def instructions(state: GraphState):
               }
             }
             """
-        )
+            
+        # Add map context if available
+        if state.get("map_context"):
+            system_content += f"\n\n{state['map_context']}"
+            
+        system_message = SystemMessage(content=system_content)
+        
         instruct = llm.with_structured_output(MapBoxInstruction).invoke([system_message] + state["messages"])
         state["frontend_actions"].append(instruct)
     
     # Let the LLM generate an appropriate response
-    system_message = SystemMessage(
-        content="""You are a helpful Geography assistant. 
+    system_content = """You are a helpful Geography assistant. 
         The system has just performed a map action based on the user's request.
         
         If the map was centered on a location, respond naturally as you would to the user's request.
@@ -244,7 +258,12 @@ def instructions(state: GraphState):
         
         Be concise but informative.
         """
-    )
+    
+    # Add map context if available
+    if state.get("map_context"):
+        system_content += f"\n\n{state['map_context']}"
+    
+    system_message = SystemMessage(content=system_content)
     
     # Generate a natural response
     # Include the user's original message for better context
@@ -257,7 +276,15 @@ def instructions(state: GraphState):
     
     # Generate the response
     llm_response = llm.invoke(prompt_messages)
-    state["messages"] = [AIMessage(content=llm_response.content)]
+    
+    # Make sure the AI response isn't empty to ensure the frontend shows a message
+    if not llm_response.content.strip():
+        # If the LLM didn't generate a response, provide a default one
+        response_content = "I've updated the map based on your request."
+    else:
+        response_content = llm_response.content
+        
+    state["messages"] = [AIMessage(content=response_content)]
     
     return state
 

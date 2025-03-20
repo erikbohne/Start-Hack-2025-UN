@@ -185,11 +185,9 @@ export function VercelV0Chat() {
 
             // Read and process the stream
             let accumulatedContent = "";
-            let instruction = null;
             
-            // Check for special instruction markers
-            const instructionStart = "<<INSTRUCTION>>";
-            const instructionEnd = "<</INSTRUCTION>>";
+            // Check for instruction marker used by the backend
+            const instructionMarker = "INSTRUCTION:";
             
             while (true) {
                 const { done, value } = await reader.read();
@@ -199,47 +197,61 @@ export function VercelV0Chat() {
                 const chunk = new TextDecoder().decode(value);
                 
                 // Check if this chunk contains an instruction
-                if (chunk.includes(instructionStart) && chunk.includes(instructionEnd)) {
-                    const instructionStartIndex = chunk.indexOf(instructionStart) + instructionStart.length;
-                    const instructionEndIndex = chunk.indexOf(instructionEnd);
-                    instruction = chunk.substring(instructionStartIndex, instructionEndIndex).trim();
+                if (chunk.includes(instructionMarker)) {
+                    // Split the chunk at the instruction marker
+                    const parts = chunk.split(instructionMarker);
                     
-                    // Remove the instruction from the chunk
-                    const cleanedChunk = chunk.replace(
-                        chunk.substring(
-                            chunk.indexOf(instructionStart), 
-                            chunk.indexOf(instructionEnd) + instructionEnd.length
-                        ), 
-                        ""
-                    );
+                    // Add the first part (before instruction) to content
+                    if (parts[0].trim()) {
+                        accumulatedContent += parts[0];
+                        
+                        // Update the AI message with the accumulated content
+                        setMessages(prev => 
+                            prev.map(msg => 
+                                msg.id === aiMessageId 
+                                ? { ...msg, content: accumulatedContent } 
+                                : msg
+                            )
+                        );
+                    }
                     
-                    accumulatedContent += cleanedChunk;
+                    // Process the instruction (the second part)
+                    if (parts.length > 1 && parts[1].trim()) {
+                        try {
+                            // Log the raw instruction data for debugging
+                            console.log("Raw instruction data:", parts[1].trim());
+                            
+                            // Process the instruction JSON
+                            const instructionResult = processInstruction(parts[1].trim());
+                            
+                            // Add the instruction result as a separate system message
+                            const instructionMessage = {
+                                id: generateMessageId(),
+                                type: "instruction",
+                                content: instructionResult,
+                                timestamp: new Date(),
+                                instructionData: { action: "processed", data: { instruction: parts[1].trim() } }
+                            };
+                            
+                            console.log("Adding instruction message:", instructionMessage);
+                            setMessages(prev => [...prev, instructionMessage]);
+                        } catch (error) {
+                            console.error("Error processing instruction:", error, "Raw data:", parts[1]);
+                        }
+                    }
                 } else {
+                    // Regular chunk with no instruction
                     accumulatedContent += chunk;
-                }
-
-                // Update the AI message with the accumulated content
-                setMessages(prev => 
-                    prev.map(msg => 
-                        msg.id === aiMessageId 
+                    
+                    // Update the AI message with the accumulated content
+                    setMessages(prev => 
+                        prev.map(msg => 
+                            msg.id === aiMessageId 
                             ? { ...msg, content: accumulatedContent } 
                             : msg
-                    )
-                );
-            }
-            
-            // If we found an instruction, process it and add the result as a new message
-            if (instruction) {
-                const instructionResult = processInstruction(instruction);
-                
-                // Add the instruction result as a separate system message
-                setMessages(prev => [...prev, {
-                    id: generateMessageId(),
-                    type: "instruction",
-                    content: instructionResult,
-                    timestamp: new Date(),
-                    instructionData: { action: "processed", data: { instruction } }
-                }]);
+                        )
+                    );
+                }
             }
         } catch (error) {
             console.error("Error sending message:", error);
@@ -266,64 +278,131 @@ export function VercelV0Chat() {
     };
 
     // Function to process instructions from AI
-    const processInstruction = useCallback((instruction: string) => {
+    const processInstruction = useCallback((instructionJson: string) => {
         try {
             // Try to parse as JSON
-            const instructionData = JSON.parse(instruction);
+            const instructionData = JSON.parse(instructionJson);
+            console.log("Processing instruction:", instructionData);
             
-            if (instructionData.action === 'toggle3DMode') {
-                mapContext.toggle3DMode();
-                return "I've switched the map to " + (mapContext.is3DMode ? "3D" : "2D") + " mode.";
-            }
-            
-            if (instructionData.action === 'changeYear' && instructionData.year) {
-                const yearIndex = mapContext.yearSequence.current.indexOf(instructionData.year);
-                if (yearIndex >= 0) {
-                    mapContext.handleYearSelection(yearIndex);
-                    return `I've set the year to ${instructionData.year}.`;
+            // Handle backend instruction format (which uses MapBoxActions enum)
+            if (instructionData.action === 'SET_CENTER' && instructionData.data) {
+                console.log("Processing SET_CENTER instruction:", instructionData);
+                if (instructionData.data.center && Array.isArray(instructionData.data.center)) {
+                    // If we have a map instance, center it
+                    if (mapContext.map.current) {
+                        console.log("Centering map to:", instructionData.data.center, "with zoom:", instructionData.data.zoom || 5);
+                        mapContext.map.current.flyTo({
+                            center: instructionData.data.center,
+                            zoom: instructionData.data.zoom || 5,
+                            essential: true
+                        });
+                        
+                        return `I've centered the map on the requested location.`;
+                    } else {
+                        console.error("Map instance not available");
+                    }
+                } else {
+                    console.error("Invalid center coordinates:", instructionData.data);
                 }
-                return "I couldn't find that year in the available data.";
+                return "I tried to center the map, but couldn't get valid coordinates.";
             }
             
-            if (instructionData.action === 'toggleAnimation') {
-                mapContext.toggleAnimation();
-                return mapContext.animating ? "Started the animation." : "Stopped the animation.";
+            if (instructionData.action === 'SET_ZOOM' && instructionData.data) {
+                // If we have a map instance, zoom it
+                if (mapContext.map.current && instructionData.data.zoom) {
+                    mapContext.map.current.zoomTo(instructionData.data.zoom);
+                    return `I've set the zoom level to ${instructionData.data.zoom}.`;
+                }
+                return "I tried to set the zoom level, but couldn't get valid parameters.";
             }
             
-            if (instructionData.action === 'changeAnimationSpeed' && instructionData.speed) {
-                const speed = instructionData.speed === 'slow' ? 4000 : 
-                             instructionData.speed === 'medium' ? 2000 : 
-                             instructionData.speed === 'fast' ? 1000 : 2000;
-                             
-                mapContext.changeAnimationSpeed(speed);
-                return `Animation speed set to ${instructionData.speed}.`;
+            if (instructionData.action === 'SET_GEOJSON' && instructionData.data) {
+                // Handle GeoJSON data
+                if (mapContext.map.current && instructionData.data.geojson) {
+                    // Implementation would depend on how we want to handle GeoJSON
+                    // This is a simplified version
+                    const id = `geojson-${Date.now()}`;
+                    
+                    // Check if the source already exists
+                    if (!mapContext.map.current.getSource(id)) {
+                        mapContext.map.current.addSource(id, {
+                            type: 'geojson',
+                            data: instructionData.data.geojson
+                        });
+                        
+                        // Add a layer
+                        mapContext.map.current.addLayer({
+                            id: id,
+                            type: 'fill',
+                            source: id,
+                            paint: {
+                                'fill-color': instructionData.data.fillColor || '#088',
+                                'fill-opacity': instructionData.data.fillOpacity || 0.8
+                            }
+                        });
+                        
+                        return "I've added the requested data to the map.";
+                    }
+                }
+                return "I tried to add data to the map, but couldn't get valid parameters.";
             }
             
-            if (instructionData.action === 'loadData' && 
-                instructionData.datasets && 
-                instructionData.countries && 
-                instructionData.years) {
+            // Also handle our custom actions
+            if (instructionData.type === 'instruction') {
+                if (instructionData.action === 'toggle3DMode') {
+                    mapContext.toggle3DMode();
+                    return "I've switched the map to " + (mapContext.is3DMode ? "3D" : "2D") + " mode.";
+                }
                 
-                mapContext.loadGeoData(
-                    instructionData.datasets as DatasetType[],
-                    instructionData.countries as CountryType[],
-                    instructionData.years as number[]
-                );
+                if (instructionData.action === 'changeYear' && instructionData.data?.year) {
+                    const yearIndex = mapContext.yearSequence.current.indexOf(instructionData.data.year);
+                    if (yearIndex >= 0) {
+                        mapContext.handleYearSelection(yearIndex);
+                        return `I've set the year to ${instructionData.data.year}.`;
+                    }
+                    return "I couldn't find that year in the available data.";
+                }
                 
-                return "Loading the requested data...";
+                if (instructionData.action === 'toggleAnimation') {
+                    mapContext.toggleAnimation();
+                    return mapContext.animating ? "Started the animation." : "Stopped the animation.";
+                }
+                
+                if (instructionData.action === 'changeAnimationSpeed' && instructionData.data?.speed) {
+                    const speed = instructionData.data.speed === 'slow' ? 4000 : 
+                                instructionData.data.speed === 'medium' ? 2000 : 
+                                instructionData.data.speed === 'fast' ? 1000 : 2000;
+                                
+                    mapContext.changeAnimationSpeed(speed);
+                    return `Animation speed set to ${instructionData.data.speed}.`;
+                }
+                
+                if (instructionData.action === 'loadData' && 
+                    instructionData.data?.datasets && 
+                    instructionData.data?.countries && 
+                    instructionData.data?.years) {
+                    
+                    mapContext.loadGeoData(
+                        instructionData.data.datasets as DatasetType[],
+                        instructionData.data.countries as CountryType[],
+                        instructionData.data.years as number[]
+                    );
+                    
+                    return "Loading the requested data...";
+                }
+                
+                if (instructionData.action === 'setThreshold' && 
+                    instructionData.data?.dataset && 
+                    instructionData.data?.value !== undefined) {
+                    
+                    mapContext.handleThresholdChange(instructionData.data.dataset, instructionData.data.value);
+                    return `Set threshold for ${instructionData.data.dataset} to ${instructionData.data.value}.`;
+                }
             }
             
-            if (instructionData.action === 'setThreshold' && 
-                instructionData.dataset && 
-                instructionData.value !== undefined) {
-                
-                mapContext.handleThresholdChange(instructionData.dataset, instructionData.value);
-                return `Set threshold for ${instructionData.dataset} to ${instructionData.value}.`;
-            }
-            
-            return "I couldn't understand that instruction.";
+            return "I processed your request, but couldn't perform a specific map action.";
         } catch (e) {
-            console.error("Failed to process instruction:", e);
+            console.error("Failed to process instruction:", e, "Raw instruction:", instructionJson);
             return "I tried to perform an action but couldn't understand the instruction format.";
         }
     }, [mapContext]);

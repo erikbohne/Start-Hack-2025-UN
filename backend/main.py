@@ -6,7 +6,8 @@ from fastapi.staticfiles import StaticFiles
 from graphs.GeoChatAgent.agent import stream_geo_chat
 from fastapi.middleware.cors import CORSMiddleware
 from enum import Enum
-from typing import List, Dict
+from typing import List, Dict, Any
+from pydantic import BaseModel, Field
 from functools import lru_cache
 from dotenv import load_dotenv
 
@@ -126,12 +127,16 @@ def get_files(
     return result
 
 
+class ChatRequest(BaseModel):
+    messages: List[Dict[str, str]]
+    mapState: Dict[str, Any] = Field(default_factory=dict)
+
 @app.post("/chat/stream")
-async def stream_chat(messages: List[Dict[str, str]]):
+async def stream_chat(request: ChatRequest):
     """
-    Endpoint that streams a chat log file.
+    Endpoint that streams a chat response with possible map instructions.
     """
-    return StreamingResponse(stream_geo_chat(messages), media_type="text/plain")
+    return StreamingResponse(stream_geo_chat(request.messages, request.mapState), media_type="text/plain")
 
 
 if __name__ == "__main__":
