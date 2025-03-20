@@ -712,6 +712,13 @@ export default function Map() {
             datasetRanges={datasetRanges.current}
             thresholdValues={thresholdValues}
             onThresholdChange={handleThresholdChange}
+            activeDatasets={datasetCountryCombo.current
+              .map(item => item.dataset)
+              .filter((v, i, a) => a.indexOf(v) === i) as DatasetType[]}
+            activeCountries={datasetCountryCombo.current
+              .map(item => item.country)
+              .filter((v, i, a) => a.indexOf(v) === i) as CountryType[]}
+            activeYears={yearSequence.current}
           />
         </div>
       </div>

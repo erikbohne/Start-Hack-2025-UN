@@ -21,13 +21,24 @@ def route_user_message(state: GraphState) -> Literal["chat_agent", "create_instr
     system_content = """Determine whether the user's message requires map interaction.
         
         Examples that require map interaction:
-        - "Show me Paris on the map"
-        - "Center the map on New York"
-        - "Zoom in to Tokyo"
-        - "Show me data for Burkina Faso"
-        - "Focus on Africa"
+        - "Show me Paris on the map" (centering the map)
+        - "Center the map on New York" (centering the map)
+        - "Zoom in to Tokyo" (zooming)
+        - "Show me data for Burkina Faso" (loading data)
+        - "Show me population density in Mali for 2015" (loading specific dataset)
+        - "Show areas with precipitation above 50 in Niger" (loading data with threshold)
+        - "Focus on Africa" (centering the map)
+        - "Compare population between Chad and Mali" (loading data for comparison)
+        - "Show me trends in rainfall from 2010 to 2020" (loading temporal data)
         
-        Choose MAPBOX_INSTRUCTIONS if any map manipulation is needed. Otherwise choose CHAT_AGENT.
+        Choose MAPBOX_INSTRUCTIONS if any map manipulation is needed. This includes:
+        - Centering on locations
+        - Zooming
+        - Loading data (countries, datasets, years)
+        - Setting thresholds
+        - Comparing data
+        
+        Otherwise choose CHAT_AGENT.
         """
     
     # Add map context if available
@@ -49,6 +60,41 @@ def route_user_message(state: GraphState) -> Literal["chat_agent", "create_instr
 
 def create_instructions(state: GraphState):
     """Creates instructions for the map based on the user's query."""
+    system_content = """You are going to create a list of the instructions we will do to Mapbox.
+        
+        AVAILABLE MAP ACTIONS:
+        - SET_CENTER: Move the map to center on a location
+        - SET_ZOOM: Change the zoom level of the map
+        - SET_GEOJSON: Add data visualization to the map (countries, datasets, years)
+        
+        Examples:
+        1. If the task is to "Show me Paris", you would return:
+           [MapBoxActions.SET_CENTER]
+        
+        2. If the task is to "Zoom into the Eiffel Tower", you would return:
+           [MapBoxActions.SET_CENTER, MapBoxActions.SET_ZOOM]
+        
+        3. If the task is to "Show population data for Burkina Faso", you would return:
+           [MapBoxActions.SET_CENTER, MapBoxActions.SET_GEOJSON]
+        
+        4. If the task is to "Compare rainfall in Mali and Chad from 2010 to 2015", you would return:
+           [MapBoxActions.SET_GEOJSON]
+           
+        When to use SET_GEOJSON:
+        - Whenever the user wants to see specific data (population density, precipitation)
+        - When the user wants to filter data (show areas with population above 50)
+        - When the user wants to compare data across regions or time
+        - When the user mentions specific countries, datasets, or years
+        
+        Convert the user's request into a sequence of map actions.
+        """
+    
+    # Add map context if available
+    if state.get("map_context"):
+        system_content += f"\n\n{state['map_context']}"
+        
+    system_message = SystemMessage(content=system_content)
+    
     instructions = llm.with_structured_output(MapBoxActionList).invoke(state["messages"])
     print(f"Created instructions: {instructions.actions}")
     return {"instructions_list": instructions.actions}
@@ -217,28 +263,45 @@ def instructions(state: GraphState):
         state["frontend_actions"].append(instruct)
         
     elif next_action == MapBoxActions.SET_GEOJSON:
-        system_content = """You are going to set GeoJSON data on the map.
-            For example:
+        system_content = """You are going to set GeoJSON data parameters on the map.
+            You need to provide the datasets, countries, and years to display.
+            
+            Available datasets:
+            - "PopDensity" (Population Density)
+            - "Precipitation" (Precipitation)
+            
+            Available countries:
+            - "Burkina_Faso" 
+            - "Chad"
+            - "Mali"
+            - "Mauritania"
+            - "Niger"
+            - "Senegal"
+            - "Sudan"
+            
+            Available years: 2010 through 2020
+            
+            Example for loading population density data for Mali in 2015:
             {
               "action": "SET_GEOJSON",
               "data": {
-                "geojson": {
-                  "type": "FeatureCollection",
-                  "features": [
-                    {
-                      "type": "Feature",
-                      "properties": {},
-                      "geometry": {
-                        "type": "Polygon",
-                        "coordinates": [[[2.32, 48.85], [2.38, 48.85], [2.38, 48.87], [2.32, 48.87], [2.32, 48.85]]]
-                      }
-                    }
-                  ]
-                },
-                "fillColor": "#3288bd",
-                "fillOpacity": 0.6
+                "datasets": ["PopDensity"],
+                "countries": ["Mali"],
+                "years": [2015],
+                "thresholds": {
+                  "PopDensity": 20,
+                  "Precipitation": 0
+                }
               }
             }
+            
+            Based on the user's request, determine which datasets, countries, and years should be displayed.
+            If the user is asking about a specific type of data (population, rainfall, etc.), select the appropriate dataset.
+            If the user is asking about specific countries, include those countries.
+            If the user mentions years, include those years. Otherwise default to 2015.
+            
+            You can set threshold values to filter the data. For example, if the user asks to see areas with population 
+            density above 50, set the threshold for "PopDensity" to 50.
             """
             
         # Add map context if available

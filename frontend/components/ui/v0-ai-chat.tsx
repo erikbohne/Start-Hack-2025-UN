@@ -326,34 +326,76 @@ export function VercelV0Chat() {
             }
             
             if (instructionData.action === 'SET_GEOJSON' && instructionData.data) {
-                // Handle GeoJSON data
-                if (mapContext.map.current && instructionData.data.geojson) {
-                    // Implementation would depend on how we want to handle GeoJSON
-                    // This is a simplified version
-                    const id = `geojson-${Date.now()}`;
+                console.log("Processing SET_GEOJSON instruction:", instructionData.data);
+                
+                // Check if we have the datasets, countries, and years parameters
+                if (
+                    instructionData.data.datasets && 
+                    Array.isArray(instructionData.data.datasets) && 
+                    instructionData.data.countries && 
+                    Array.isArray(instructionData.data.countries) &&
+                    instructionData.data.years && 
+                    Array.isArray(instructionData.data.years)
+                ) {
+                    console.log("Loading data with params:", {
+                        datasets: instructionData.data.datasets,
+                        countries: instructionData.data.countries,
+                        years: instructionData.data.years
+                    });
                     
-                    // Check if the source already exists
-                    if (!mapContext.map.current.getSource(id)) {
-                        mapContext.map.current.addSource(id, {
-                            type: 'geojson',
-                            data: instructionData.data.geojson
-                        });
-                        
-                        // Add a layer
-                        mapContext.map.current.addLayer({
-                            id: id,
-                            type: 'fill',
-                            source: id,
-                            paint: {
-                                'fill-color': instructionData.data.fillColor || '#088',
-                                'fill-opacity': instructionData.data.fillOpacity || 0.8
+                    // Set threshold values if included
+                    if (instructionData.data.thresholds && typeof instructionData.data.thresholds === 'object') {
+                        Object.entries(instructionData.data.thresholds).forEach(([dataset, value]) => {
+                            if (typeof value === 'number') {
+                                mapContext.handleThresholdChange(dataset, value);
+                                console.log(`Set threshold for ${dataset} to ${value}`);
                             }
                         });
+                    }
+                    
+                    // Use the MapContext loadGeoData method to load the data
+                    mapContext.loadGeoData(
+                        instructionData.data.datasets as DatasetType[],
+                        instructionData.data.countries as CountryType[],
+                        instructionData.data.years as number[]
+                    );
+                    
+                    // Construct a response message
+                    const datasets = instructionData.data.datasets.join(', ');
+                    const countries = instructionData.data.countries.map(c => c.replace('_', ' ')).join(', ');
+                    const years = instructionData.data.years.join(', ');
+                    
+                    return `I've loaded ${datasets} data for ${countries} (${years}).`;
+                }
+                // Fallback to the old GeoJSON handling for backward compatibility
+                else if (instructionData.data.geojson) {
+                    // Handle direct GeoJSON data
+                    if (mapContext.map.current) {
+                        const id = `geojson-${Date.now()}`;
                         
-                        return "I've added the requested data to the map.";
+                        // Check if the source already exists
+                        if (!mapContext.map.current.getSource(id)) {
+                            mapContext.map.current.addSource(id, {
+                                type: 'geojson',
+                                data: instructionData.data.geojson
+                            });
+                            
+                            // Add a layer
+                            mapContext.map.current.addLayer({
+                                id: id,
+                                type: 'fill',
+                                source: id,
+                                paint: {
+                                    'fill-color': instructionData.data.fillColor || '#088',
+                                    'fill-opacity': instructionData.data.fillOpacity || 0.8
+                                }
+                            });
+                            
+                            return "I've added the requested data to the map.";
+                        }
                     }
                 }
-                return "I tried to add data to the map, but couldn't get valid parameters.";
+                return "I tried to load the data, but couldn't get valid parameters.";
             }
             
             // Also handle our custom actions

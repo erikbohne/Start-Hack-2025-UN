@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { DatasetType, CountryType } from '@/lib/types';
 
 interface DataControlsProps {
@@ -21,6 +21,12 @@ interface DataControlsProps {
   onThresholdChange?: (dataset: string, value: number) => void;
 }
 
+interface ExtendedDataControlsProps extends DataControlsProps {
+  activeDatasets?: DatasetType[];
+  activeCountries?: CountryType[];
+  activeYears?: number[];
+}
+
 export default function DataControls({ 
   onApplyFilters, 
   datasetRanges = {
@@ -31,15 +37,43 @@ export default function DataControls({
     PopDensity: 0,
     Precipitation: 0
   },
-  onThresholdChange
-}: DataControlsProps) {
+  onThresholdChange,
+  activeDatasets,
+  activeCountries,
+  activeYears
+}: ExtendedDataControlsProps) {
   const [selectedDatasets, setSelectedDatasets] = useState<DatasetType[]>(['PopDensity']);
   const [selectedCountries, setSelectedCountries] = useState<CountryType[]>(['Mali']);
   const [selectedYears, setSelectedYears] = useState<number[]>([2015]);
+  
   const [showThresholds, setShowThresholds] = useState<boolean>(false);
   const [localThresholds, setLocalThresholds] = useState<{
     [dataset: string]: number;
   }>(thresholdValues);
+  
+  // Update local state when external selections change
+  useEffect(() => {
+    if (activeDatasets && activeDatasets.length > 0) {
+      setSelectedDatasets(activeDatasets);
+    }
+  }, [activeDatasets]);
+  
+  useEffect(() => {
+    if (activeCountries && activeCountries.length > 0) {
+      setSelectedCountries(activeCountries);
+    }
+  }, [activeCountries]);
+  
+  useEffect(() => {
+    if (activeYears && activeYears.length > 0) {
+      setSelectedYears(activeYears);
+    }
+  }, [activeYears]);
+  
+  // Update local thresholds when external thresholds change
+  useEffect(() => {
+    setLocalThresholds(thresholdValues);
+  }, [thresholdValues]);
 
   // Dataset options from backend DatasetEnum
   const datasetOptions: DatasetType[] = ['PopDensity', 'Precipitation'];
