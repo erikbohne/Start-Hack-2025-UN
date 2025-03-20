@@ -5,16 +5,30 @@ import { useState } from "react";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import {
-    ImageIcon,
-    FileUp,
-    Figma,
-    MonitorIcon,
-    CircleUserRound,
     ArrowUpIcon,
-    Paperclip,
-    PlusIcon,
+    ChevronLeftIcon,
+    ChevronRightIcon,
 } from "lucide-react";
 
+<<<<<<< HEAD
+=======
+// Define message types
+type MessageType = "human" | "ai" | "instruction";
+
+// Define message interface
+interface Message {
+    id: string;
+    type: MessageType;
+    content: string;
+    timestamp: Date;
+    // For instructions, we'll need additional data
+    instructionData?: {
+        action: string;
+        data: Record<string, unknown>;
+    };
+}
+
+>>>>>>> c893c7a6 (transparent UI)
 interface UseAutoResizeTextareaProps {
     minHeight: number;
     maxHeight?: number;
@@ -73,6 +87,13 @@ function useAutoResizeTextarea({
 
 export function VercelV0Chat() {
     const [value, setValue] = useState("");
+<<<<<<< HEAD
+=======
+    const [messages, setMessages] = useState<Message[]>([]);
+    const [isLoading, setIsLoading] = useState(false);
+    const [isChatExpanded, setIsChatExpanded] = useState<boolean>(true);
+    const messagesEndRef = useRef<HTMLDivElement>(null);
+>>>>>>> c893c7a6 (transparent UI)
     const { textareaRef, adjustHeight } = useAutoResizeTextarea({
         minHeight: 60,
         maxHeight: 200,
@@ -89,6 +110,7 @@ export function VercelV0Chat() {
     };
 
     return (
+<<<<<<< HEAD
         <div className="flex flex-col items-center w-full max-w-4xl mx-auto p-4 space-y-8">
             <h1 className="text-4xl font-bold text-black dark:text-white">
                 What do you want to see?
@@ -211,3 +233,135 @@ function ActionButton({ icon, label }: ActionButtonProps) {
 }
 
 
+=======
+        <div className={`flex flex-col h-full bg-white/30 backdrop-blur-sm text-black transition-all duration-300 transform ${
+            isChatExpanded ? 'translate-x-0' : 'translate-x-[calc(100%-40px)]'
+        }`}>
+            <button
+                onClick={() => setIsChatExpanded(!isChatExpanded)}
+                className="absolute left-2 top-2 bg-gray-200/70 backdrop-blur-sm text-black rounded-full w-8 h-8 flex items-center justify-center z-30 shadow-md"
+            >
+                {isChatExpanded ? (
+                    <ChevronRightIcon className="h-5 w-5" />
+                ) : (
+                    <ChevronLeftIcon className="h-5 w-5" />
+                )}
+            </button>
+
+            {messages.length === 0 ? (
+                <div className="flex flex-col items-center justify-center h-full w-full p-4">
+                    <div className="max-w-4xl w-full space-y-8">
+                        <h1 className="text-4xl font-bold text-black text-center backdrop-blur-sm bg-white/30 rounded-lg p-4">
+                            What do you want to see?
+                        </h1>
+
+                        <div className="w-full">
+                            <div className="relative bg-white/50 backdrop-blur-md rounded-xl border border-gray-200/50">
+                                <div className="overflow-y-auto">
+                                    <Textarea
+                                        ref={textareaRef}
+                                        value={value}
+                                        onChange={(e) => {
+                                            setValue(e.target.value);
+                                            adjustHeight();
+                                        }}
+                                        onKeyDown={handleKeyDown}
+                                        placeholder="Ask v0 a question..."
+                                        className={cn(
+                                            "w-full px-4 py-3",
+                                            "resize-none",
+                                            "bg-transparent",
+                                            "border-none",
+                                            "text-black text-sm",
+                                            "focus:outline-none",
+                                            "focus-visible:ring-0 focus-visible:ring-offset-0",
+                                            "placeholder:text-gray-700 placeholder:text-sm",
+                                            "min-h-[60px]"
+                                        )}
+                                        style={{
+                                            overflow: "hidden",
+                                        }}
+                                    />
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            ) : (
+                <>
+                    <div className="flex-1 overflow-y-auto p-4">
+                        {messages.map((message) => (
+                            <div
+                                key={message.id}
+                                className={cn(
+                                    "mb-4 flex",
+                                    message.type === "human"
+                                        ? "justify-end"
+                                        : "justify-start"
+                                )}
+                            >
+                                <div
+                                    className={cn(
+                                        "rounded-lg px-4 py-2 max-w-[80%] backdrop-blur-sm",
+                                        message.type === "human"
+                                            ? "bg-gray-200/70 text-black"
+                                            : "bg-white/50 text-black"
+                                    )}
+                                >
+                                    {message.content}
+                                </div>
+                            </div>
+                        ))}
+                        <div ref={messagesEndRef} />
+                    </div>
+
+                    <div className="p-4 border-t border-gray-200/30">
+                        <div className="relative bg-white/50 backdrop-blur-md rounded-xl">
+                            <div className="overflow-y-auto">
+                                <Textarea
+                                    ref={textareaRef}
+                                    value={value}
+                                    onChange={(e) => {
+                                        setValue(e.target.value);
+                                        adjustHeight();
+                                    }}
+                                    onKeyDown={handleKeyDown}
+                                    placeholder="Type a message..."
+                                    className={cn(
+                                        "w-full px-4 py-3",
+                                        "resize-none",
+                                        "bg-transparent",
+                                        "border-none",
+                                        "text-black text-sm",
+                                        "focus:outline-none",
+                                        "focus-visible:ring-0 focus-visible:ring-offset-0",
+                                        "placeholder:text-gray-700 placeholder:text-sm",
+                                        "min-h-[60px]"
+                                    )}
+                                    style={{
+                                        overflow: "hidden",
+                                    }}
+                                />
+                            </div>
+                            <button
+                                onClick={handleSendMessage}
+                                disabled={!value.trim() || isLoading}
+                                className={cn(
+                                    "absolute bottom-2 right-2",
+                                    "p-2 rounded-lg",
+                                    "bg-gray-200/70 hover:bg-gray-300/70 backdrop-blur-sm",
+                                    "text-black",
+                                    "transition-colors",
+                                    "disabled:opacity-50"
+                                )}
+                            >
+                                <ArrowUpIcon className="h-4 w-4" />
+                            </button>
+                        </div>
+                    </div>
+                </>
+            )}
+        </div>
+    );
+}
+>>>>>>> c893c7a6 (transparent UI)

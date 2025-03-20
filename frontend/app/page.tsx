@@ -1,13 +1,15 @@
 import { VercelV0Chat } from "@/components/ui/v0-ai-chat";
 import Map from '@/components/Map';
+import { StackingNavbar } from "@/components/ui/stacking-navbar";
 
 export default function Home() {
   return (
-    <main className="flex h-screen w-full overflow-hidden">
-      <div className="w-3/5 h-full">
+    <main className="relative h-screen w-full overflow-hidden">
+      <div className="absolute inset-0">
         <Map />
       </div>
-      <div className="w-2/5 h-full">
+      <StackingNavbar />
+      <div className="absolute right-0 top-0 h-full">
         <VercelV0Chat />
       </div>
     </main>
