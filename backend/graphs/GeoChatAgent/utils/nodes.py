@@ -277,8 +277,14 @@ def instructions(state: GraphState):
 
     if not state.get("frontend_actions"):
         state["frontend_actions"] = []
-
+    
+    # If there are no more instructions, return the state as is
+    if not state.get("instructions_list"):
+        return state
+        
+    # Process the next instruction from the list
     next_action = state["instructions_list"].pop(0)
+    print(f"Processing instruction: {next_action}")
     
     # Get the user's original question
     user_message = state["messages"][-1].content.lower() if state["messages"] else ""
@@ -468,8 +474,7 @@ def instructions(state: GraphState):
         if "frontend_actions" not in state:
             state["frontend_actions"] = []
         
-        # Clear existing actions and add this one
-        state["frontend_actions"] = []
+        # Add this instruction to the list
         state["frontend_actions"].append(instruct)
         
     elif next_action == MapBoxActions.SET_ZOOM:
@@ -543,53 +548,17 @@ def instructions(state: GraphState):
         
         instruct = llm.with_structured_output(MapBoxInstruction).invoke([system_message] + state["messages"])
         state["frontend_actions"].append(instruct)
-    
-    # Let the LLM generate an appropriate response
-    system_content = """You are a helpful Geography assistant. 
-        The system has just performed a map action based on the user's request.
-        
-        If the map was centered on a location, respond naturally as you would to the user's request.
-        For example, if they asked to see Paris, you might say "I've centered the map on Paris for you. 
-        Paris is the capital of France and known for landmarks like the Eiffel Tower."
-        
-        Keep your response natural, conversational, and focused on what the user asked.
-        Do not use phrases like "I've centered the map" unless it flows naturally with your response.
-        
-        Be concise but informative.
-        """
-    
-    # Add map context if available
-    if state.get("map_context"):
-        system_content += f"\n\n{state['map_context']}"
-    
-    system_message = SystemMessage(content=system_content)
-    
-    # Generate a natural response
-    # Include the user's original message for better context
-    original_message = state["messages"][-1] if state["messages"] else None
-    
-    # Create a message list with the system prompt and the user's original message
-    prompt_messages = [system_message]
-    if original_message:
-        prompt_messages.append(original_message)
-    
-    # Generate the response
-    llm_response = llm.invoke(prompt_messages)
-    
-    # Make sure the AI response isn't empty to ensure the frontend shows a message
-    if not llm_response.content.strip():
-        # If the LLM didn't generate a response, provide a default one
-        response_content = "I've updated the map based on your request."
-    else:
-        response_content = llm_response.content
-        
-    state["messages"] = [AIMessage(content=response_content)]
-    
+
     return state
 
 
 def is_more_instructions(state: GraphState) -> Literal["chat_agent", "instructions"]:
     """Returns 'instructions' if there are more instructions or 'chat_agent' if there are no more instructions."""
-    if state["instructions_list"]:
+    if state.get("instructions_list") and len(state["instructions_list"]) > 0:
+        # Still have more instructions to process, continue with the instructions node
+        print(f"More instructions to process: {len(state['instructions_list'])} remaining")
         return "instructions"
+    
+    # No more instructions, return the final state with messages for the chat agent
+    print("No more instructions to process, continuing to chat agent")
     return "chat_agent"

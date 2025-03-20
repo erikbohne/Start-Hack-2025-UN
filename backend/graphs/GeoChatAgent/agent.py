@@ -2,7 +2,7 @@ from langgraph.graph import START, END, StateGraph
 from typing import List, Dict, Any, AsyncGenerator
 from langchain_core.messages import HumanMessage, AIMessage
 from graphs.GeoChatAgent.utils.state import GraphState
-from graphs.GeoChatAgent.utils.nodes import route_user_message, chat_agent, instructions, create_instructions, analyze_data
+from graphs.GeoChatAgent.utils.nodes import route_user_message, chat_agent, instructions, create_instructions, analyze_data, is_more_instructions
 from graphs.GeoChatAgent.utils.models import MapBoxInstruction
 import json
 
@@ -15,8 +15,17 @@ workflow.add_node("analyze_data", analyze_data)
 
 workflow.add_edge("chat_agent", END)
 workflow.add_edge("create_instructions", "instructions")
-workflow.add_edge("instructions", END)
 workflow.add_edge("analyze_data", END)
+
+# Add conditional edge for instructions
+workflow.add_conditional_edges(
+    "instructions",
+    is_more_instructions,
+    {
+        "instructions": "instructions",  # If more instructions, loop back
+        "chat_agent": END  # If no more instructions, end
+    }
+)
 
 workflow.add_conditional_edges(START, route_user_message)
 
@@ -25,6 +34,12 @@ graph = workflow.compile()
 async def stream_geo_chat(messages: List[Dict[str, Any]], mapState: Dict[str, Any] = None) -> AsyncGenerator[str, None]:
     print("Starting stream_geo_chat with messages:", [m.get("content", "") for m in messages])
     print("Map state:", mapState)
+    
+    # Reset the sent_instructions set for this conversation
+    if hasattr(stream_geo_chat, "sent_instructions"):
+        stream_geo_chat.sent_instructions = set()
+    else:
+        stream_geo_chat.sent_instructions = set()
     
     formatted_messages = []
     for message in messages:
@@ -81,19 +96,27 @@ async def stream_geo_chat(messages: List[Dict[str, Any]], mapState: Dict[str, An
         
         data = response.get("data", {})
 
+        # Track which instructions we have already sent to avoid duplicates
+        if not hasattr(stream_geo_chat, "sent_instructions"):
+            stream_geo_chat.sent_instructions = set()
+            
+        # Handle direct output instructions
         if isinstance(data.get("output"), MapBoxInstruction):
-            instruction_count += 1
             instruction = {
                 "type": "instruction",
                 "action": data.get("output").action.value,
                 "data": data.get("output").data
             }
             instruction_json = json.dumps(instruction)
-            yield f"INSTRUCTION:{instruction_json}"
-            print(f"Yielding instruction #{instruction_count}: {instruction_json}")
+            
+            # Only send if we haven't sent this exact instruction before
+            instruction_hash = hash(instruction_json)
+            if instruction_hash not in stream_geo_chat.sent_instructions:
+                instruction_count += 1
+                stream_geo_chat.sent_instructions.add(instruction_hash)
+                yield f"INSTRUCTION:{instruction_json}"
+                print(f"Yielding instruction #{instruction_count}: {instruction_json}")
             continue
-        
-        data = response.get("data", {})
         chunk_obj = data.get("chunk")
         
         # Handle regular message chunks
