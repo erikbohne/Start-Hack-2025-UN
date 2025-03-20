@@ -1,10 +1,13 @@
 import os
+from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from enum import Enum
 from typing import List, Dict
 from functools import lru_cache
+
+load_dotenv()
 
 app = FastAPI()
 
@@ -123,14 +126,14 @@ if __name__ == "__main__":
     import uvicorn
     import sys
     import os
-    
+
     file_path = os.path.abspath(__file__)
     dir_path = os.path.dirname(file_path)
     file_name = os.path.basename(file_path)
     module_name = os.path.splitext(file_name)[0]
-    
+
     if dir_path not in sys.path:
         sys.path.append(dir_path)
-    
+
     # Run the server
     uvicorn.run(f"{module_name}:app", host="0.0.0.0", port=8000, reload=True)
