@@ -3,6 +3,7 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from graphs.GeoChatAgent.agent import stream_geo_chat
+from fastapi.middleware.cors import CORSMiddleware
 from enum import Enum
 from typing import List, Dict
 from functools import lru_cache
@@ -11,6 +12,15 @@ from dotenv import load_dotenv
 load_dotenv()
 
 app = FastAPI()
+
+# Configure CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Allow all origins
+    allow_credentials=True,
+    allow_methods=["*"],  # Allow all methods
+    allow_headers=["*"],  # Allow all headers
+)
 
 
 class DatasetEnum(str, Enum):
@@ -29,7 +39,7 @@ class CountryEnum(str, Enum):
 
 
 # Mount the static files directory.
-dataset_path = os.getenv("DATASET_PATH", default="../STARTHACK/vectorized/")
+dataset_path = os.getenv("DATASET_PATH", default="geofiles/")
 app.mount("/static", StaticFiles(directory=dataset_path), name="static")
 
 
@@ -124,5 +134,16 @@ async def stream_chat(messages: List[Dict[str, str]]):
 
 if __name__ == "__main__":
     import uvicorn
-
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+    import sys
+    import os
+    
+    file_path = os.path.abspath(__file__)
+    dir_path = os.path.dirname(file_path)
+    file_name = os.path.basename(file_path)
+    module_name = os.path.splitext(file_name)[0]
+    
+    if dir_path not in sys.path:
+        sys.path.append(dir_path)
+    
+    # Run the server
+    uvicorn.run(f"{module_name}:app", host="0.0.0.0", port=8000, reload=True)
