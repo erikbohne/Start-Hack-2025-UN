@@ -518,9 +518,12 @@ export default function Map() {
                   }
 
                   // Analyze data for range values (only once per dataset)
-                  const useExistingRange =
+                  // For region data, we want to recalculate the range to get better color differentiation
+                  const isRegion = layerId.includes('-region-');
+                  const useExistingRange = !isRegion && (
                     datasetRanges.current[dataset].min > 0 ||
-                    datasetRanges.current[dataset].max > 0;
+                    datasetRanges.current[dataset].max > 0
+                  );
 
                   let minDN = useExistingRange
                     ? datasetRanges.current[dataset].min
@@ -529,27 +532,56 @@ export default function Map() {
                     ? datasetRanges.current[dataset].max
                     : 0;
 
+                  // Always analyze data for regions to get better color differentiation
                   if (
-                    !useExistingRange &&
+                    (!useExistingRange || isRegion) &&
                     geojson.features &&
                     geojson.features.length > 0
                   ) {
-                    for (let i = 0; i < geojson.features.length; i++) {
-                      const feature = geojson.features[i];
-                      const dn = feature.properties?.DN;
-                      if (dn && dn > 0) {
-                        minDN = Math.min(minDN, dn);
-                        maxDN = Math.max(maxDN, dn);
+                    // For regions, calculate min/max based only on valid values
+                    const validDNValues = geojson.features
+                      .map(f => f.properties?.DN)
+                      .filter(dn => typeof dn === 'number' && dn > 0);
+                    
+                    if (validDNValues.length > 0) {
+                      minDN = Math.min(...validDNValues);
+                      maxDN = Math.max(...validDNValues);
+                      
+                      // For better color distribution, try to remove outliers
+                      if (validDNValues.length > 5) {
+                        // Sort values
+                        validDNValues.sort((a, b) => a - b);
+                        
+                        // Calculate Q1 and Q3 (quartiles)
+                        const q1Index = Math.floor(validDNValues.length * 0.25);
+                        const q3Index = Math.floor(validDNValues.length * 0.75);
+                        const q1 = validDNValues[q1Index];
+                        const q3 = validDNValues[q3Index];
+                        
+                        // Calculate IQR and adjust min/max to remove extreme outliers
+                        const iqr = q3 - q1;
+                        minDN = Math.max(minDN, q1 - iqr * 1.5);
+                        maxDN = Math.min(maxDN, q3 + iqr * 1.5);
                       }
+                      
+                      console.log(`${layerId} calculated range: min=${minDN}, max=${maxDN}`);
+                    } else {
+                      // Fallback if no valid values
+                      if (minDN === Infinity) minDN = 1;
+                      if (maxDN === 0) maxDN = 100;
                     }
 
-                    if (minDN === Infinity) minDN = 1;
-                    if (maxDN === 0) maxDN = 100;
-
-                    datasetRanges.current[dataset] = {
-                      min: minDN,
-                      max: maxDN,
-                    };
+                    // Store range differently for regions vs countries
+                    if (isRegion) {
+                      // Just use for this specific layer
+                      console.log(`Using region-specific range for ${layerId}: min=${minDN}, max=${maxDN}`);
+                    } else {
+                      // Store for dataset generally
+                      datasetRanges.current[dataset] = {
+                        min: minDN,
+                        max: maxDN,
+                      };
+                    }
                   }
 
                   if (!map.current?.getSource(layerId)) {
@@ -573,26 +605,55 @@ export default function Map() {
                       maxzoom: 12,
                       paint: {
                         "fill-color": [
-                          "interpolate",
-                          ["linear"],
-                          ["get", "DN"],
-                          minDN,
-                          "rgba(255, 245, 235, 0.9)",
-                          minDN + (maxDN - minDN) * 0.25,
-                          "rgba(254, 225, 210, 0.9)",
-                          minDN + (maxDN - minDN) * 0.5,
-                          "rgba(252, 146, 114, 0.9)",
-                          minDN + (maxDN - minDN) * 0.75,
-                          "rgba(251, 106, 74, 0.9)",
-                          maxDN,
-                          "rgba(165, 15, 21, 0.9)",
+                          "case",
+                          // Check if DN is not a number or null/undefined
+                          ["any", 
+                            ["==", ["typeof", ["get", "DN"]], "string"],
+                            ["==", ["get", "DN"], null]
+                          ],
+                          "rgba(0, 0, 0, 0)", // Transparent for N/A values
+                          [
+                            "interpolate",
+                            ["linear"],
+                            ["get", "DN"],
+                            minDN,
+                            "rgba(255, 245, 235, 0.9)",
+                            minDN + (maxDN - minDN) * 0.25,
+                            "rgba(254, 225, 210, 0.9)",
+                            minDN + (maxDN - minDN) * 0.5,
+                            "rgba(252, 146, 114, 0.9)",
+                            minDN + (maxDN - minDN) * 0.75,
+                            "rgba(251, 106, 74, 0.9)",
+                            maxDN,
+                            "rgba(165, 15, 21, 0.9)",
+                          ]
                         ],
-                        "fill-outline-color": "rgba(0, 0, 0, 0.1)",
+                        "fill-outline-color": [
+                          "case",
+                          ["any", 
+                            ["==", ["typeof", ["get", "DN"]], "string"],
+                            ["==", ["get", "DN"], null]
+                          ],
+                          "rgba(0, 0, 0, 0)", // Transparent for N/A values
+                          "rgba(0, 0, 0, 0.4)" // Darker outline for valid values
+                        ],
+                        "fill-opacity": [
+                          "case",
+                          ["<=", ["get", "DN"], 0], 
+                          0, // Make zero or negative values transparent
+                          0.9 // Normal opacity for positive values
+                        ]
                       },
                       layout: {
                         visibility: "none",
                       },
-                      filter: [">=", ["get", "DN"], thresholdValues[dataset]],
+                      // Enhanced filter for valid values
+                      filter: [
+                        "all", 
+                        ["has", "DN"], // Make sure DN property exists
+                        [">=", ["to-number", ["get", "DN"], -1], thresholdValues[dataset]],
+                        [">", ["to-number", ["get", "DN"], -1], 0] // Only show positive values
+                      ],
                     });
                   } else {
                     map.current?.addLayer({
@@ -602,26 +663,55 @@ export default function Map() {
                       maxzoom: 12,
                       paint: {
                         "fill-color": [
-                          "interpolate",
-                          ["linear"],
-                          ["get", "DN"],
-                          minDN,
-                          "rgba(240, 249, 255, 0.9)",
-                          minDN + (maxDN - minDN) * 0.25,
-                          "rgba(204, 236, 255, 0.9)",
-                          minDN + (maxDN - minDN) * 0.5,
-                          "rgba(102, 194, 255, 0.9)",
-                          minDN + (maxDN - minDN) * 0.75,
-                          "rgba(50, 136, 189, 0.9)",
-                          maxDN,
-                          "rgba(8, 48, 107, 0.9)",
+                          "case",
+                          // Check if DN is not a number or null/undefined
+                          ["any", 
+                            ["==", ["typeof", ["get", "DN"]], "string"],
+                            ["==", ["get", "DN"], null]
+                          ],
+                          "rgba(0, 0, 0, 0)", // Transparent for N/A values
+                          [
+                            "interpolate",
+                            ["linear"],
+                            ["get", "DN"],
+                            minDN,
+                            "rgba(240, 249, 255, 0.9)",
+                            minDN + (maxDN - minDN) * 0.25,
+                            "rgba(204, 236, 255, 0.9)",
+                            minDN + (maxDN - minDN) * 0.5,
+                            "rgba(102, 194, 255, 0.9)",
+                            minDN + (maxDN - minDN) * 0.75,
+                            "rgba(50, 136, 189, 0.9)",
+                            maxDN,
+                            "rgba(8, 48, 107, 0.9)",
+                          ]
                         ],
-                        "fill-outline-color": "rgba(0, 0, 0, 0.1)",
+                        "fill-outline-color": [
+                          "case",
+                          ["any", 
+                            ["==", ["typeof", ["get", "DN"]], "string"],
+                            ["==", ["get", "DN"], null]
+                          ],
+                          "rgba(0, 0, 0, 0)", // Transparent for N/A values
+                          "rgba(0, 0, 0, 0.4)" // Darker outline for valid values
+                        ],
+                        "fill-opacity": [
+                          "case",
+                          ["<=", ["get", "DN"], 0], 
+                          0, // Make zero or negative values transparent
+                          0.9 // Normal opacity for positive values
+                        ]
                       },
                       layout: {
                         visibility: "none",
                       },
-                      filter: [">=", ["get", "DN"], thresholdValues[dataset]],
+                      // Enhanced filter for valid values
+                      filter: [
+                        "all", 
+                        ["has", "DN"], // Make sure DN property exists
+                        [">=", ["to-number", ["get", "DN"], -1], thresholdValues[dataset]],
+                        [">", ["to-number", ["get", "DN"], -1], 0] // Only show positive values
+                      ],
                     });
                   }
 
@@ -633,12 +723,32 @@ export default function Map() {
                     if (!e.features || e.features.length === 0) return;
 
                     const feature = e.features[0];
-                    const dn = feature.properties?.DN || "N/A";
-
+                    const dn = feature.properties?.DN;
+                    
+                    // Format the value with better display
+                    let dnDisplay = "N/A";
+                    if (typeof dn === 'number') {
+                      dnDisplay = dn.toLocaleString(undefined, {
+                        minimumFractionDigits: 0,
+                        maximumFractionDigits: 2
+                      });
+                    }
+                    
+                    // Determine if this is a region layer
+                    const isRegionLayer = layerId.includes('-region-');
+                    
+                    // Build better content
+                    const title = dataset === "PopDensity" ? "Population Density" : dataset;
+                    const locationPrefix = isRegionLayer ? "Region" : "Country";
+                    const locationDisplay = entityKey.replace(/_/g, " ");
+                    const valueLabel = dataset === "PopDensity" ? "Density" : "Value";
+                    const units = dataset === "PopDensity" ? "people/km²" : 
+                                  dataset === "Precipitation" ? "mm" : "";
+                    
                     const content = `<div style="font-size:12px">
-                      <strong>${dataset} (${year})</strong><br/>
-                      Location: ${entityKey.replace(/_/g, " ")}<br/>
-                      Value: ${dn}
+                      <strong>${title} (${year})</strong><br/>
+                      ${locationPrefix}: ${locationDisplay}<br/>
+                      ${valueLabel}: ${dnDisplay} ${units}
                     </div>`;
 
                     new mapboxgl.Popup({
