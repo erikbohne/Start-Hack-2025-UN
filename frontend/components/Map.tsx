@@ -6,7 +6,6 @@ import "mapbox-gl/dist/mapbox-gl.css";
 import { fetchGeoData, fetchGeoJSON } from "@/lib/api";
 import { DatasetType, CountryType, GeoDataResponse } from "@/lib/types";
 import DataControls from "./DataControls";
-import { VercelV0Chat } from "./ui/v0-ai-chat";
 
 export default function Map() {
   const mapContainer = useRef<HTMLDivElement>(null);
@@ -14,8 +13,8 @@ export default function Map() {
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [is3DMode, setIs3DMode] = useState<boolean>(false); // Toggle for 2D/3D mode
-  const [dataControlsExpanded, setDataControlsExpanded] = useState<boolean>(true); // Control panel expansion state
-  const [chatExpanded, setChatExpanded] = useState<boolean>(false); // Chat UI expansion state
+  const [dataControlsExpanded, setDataControlsExpanded] =
+    useState<boolean>(true); // Control panel expansion state
 
   // Animation state
   const [animating, setAnimating] = useState<boolean>(false);
@@ -27,10 +26,12 @@ export default function Map() {
   const cachedGeojsonData = useRef<{ [key: string]: any }>({});
   const yearSequence = useRef<number[]>([]);
   const currentYearIndexRef = useRef<number>(0);
-  const datasetCountryCombo = useRef<{ dataset: string; country: string }[]>([]);
+  const datasetCountryCombo = useRef<{ dataset: string; country: string }[]>(
+    []
+  );
   const activeLayers = useRef<string[]>([]);
   const mapIsReady = useRef<boolean>(false);
-  
+
   // Data filters
   const [thresholdValues, setThresholdValues] = useState<{
     [dataset: string]: number;
@@ -38,7 +39,7 @@ export default function Map() {
     PopDensity: 0,
     Precipitation: 0,
   });
-  
+
   // Range information for datasets
   const datasetRanges = useRef<{
     [dataset: string]: { min: number; max: number };
@@ -49,22 +50,22 @@ export default function Map() {
 
   // Handle toggling between 2D and 3D mode
   const toggle3DMode = useCallback(() => {
-    setIs3DMode(prev => !prev);
-    
+    setIs3DMode((prev) => !prev);
+
     // Need to recreate the map when changing projections
     if (map.current) {
       // Store current state
       const center = map.current.getCenter();
       const zoom = map.current.getZoom();
-      
+
       // Remove existing map
       map.current.remove();
       map.current = null;
-      
+
       // Will be recreated on next render with new projection
       setTimeout(() => {
         if (!mapContainer.current) return;
-        
+
         map.current = new mapboxgl.Map({
           container: mapContainer.current,
           style: "mapbox://styles/mapbox/light-v11",
@@ -75,28 +76,36 @@ export default function Map() {
           maxZoom: 10,
           renderWorldCopies: false,
         });
-        
+
         const mapInstance = map.current;
-        
+
         mapInstance.on("load", () => {
           console.log("Map recreated successfully");
           // Add fog if switching to 3D mode
-          if (!is3DMode) { // Using !is3DMode because state hasn't updated yet
+          if (!is3DMode) {
+            // Using !is3DMode because state hasn't updated yet
             mapInstance.setFog({});
           }
           mapIsReady.current = true;
-          
+
           // Reload current layers if any
-          if (yearSequence.current.length > 0 && datasetCountryCombo.current.length > 0) {
+          if (
+            yearSequence.current.length > 0 &&
+            datasetCountryCombo.current.length > 0
+          ) {
             // Use existing filter settings
             loadGeoData(
-              datasetCountryCombo.current.map(item => item.dataset).filter((v, i, a) => a.indexOf(v) === i) as DatasetType[],
-              datasetCountryCombo.current.map(item => item.country).filter((v, i, a) => a.indexOf(v) === i) as CountryType[],
+              datasetCountryCombo.current
+                .map((item) => item.dataset)
+                .filter((v, i, a) => a.indexOf(v) === i) as DatasetType[],
+              datasetCountryCombo.current
+                .map((item) => item.country)
+                .filter((v, i, a) => a.indexOf(v) === i) as CountryType[],
               yearSequence.current
             );
           }
         });
-        
+
         mapInstance.addControl(new mapboxgl.NavigationControl());
         mapInstance.scrollZoom.enable();
       }, 100);
@@ -119,7 +128,7 @@ export default function Map() {
         zoom: 1.5,
         center: [10, 15], // Centered on Africa
         attributionControl: true,
-        maxZoom: 10, // Limit max zoom for better performance 
+        maxZoom: 10, // Limit max zoom for better performance
         renderWorldCopies: false, // Disable world copies for better performance
       });
 
@@ -156,86 +165,116 @@ export default function Map() {
       }
     };
   }, [is3DMode]);
-  
+
   // Apply threshold filter to layers with debouncing for better performance
   const applyThresholdFilter = useCallback(() => {
     if (!map.current || !displayYear) return;
-    
+
     // Use requestAnimationFrame to align with browser's render cycle
     requestAnimationFrame(() => {
       // Apply filters in batch for better performance
-      const operations = datasetCountryCombo.current.map(({ dataset, country }) => {
-        const layerId = `${dataset}-${country}-${displayYear}`;
-        if (map.current?.getLayer(layerId)) {
-          return () => map.current?.setFilter(layerId, [">=", ["get", "DN"], thresholdValues[dataset]]);
-        }
-        return null;
-      }).filter(Boolean);
-      
+      const operations = datasetCountryCombo.current
+        .map(({ dataset, country }) => {
+          const layerId = `${dataset}-${country}-${displayYear}`;
+          if (map.current?.getLayer(layerId)) {
+            return () =>
+              map.current?.setFilter(layerId, [
+                ">=",
+                ["get", "DN"],
+                thresholdValues[dataset],
+              ]);
+          }
+          return null;
+        })
+        .filter(Boolean);
+
       // Execute all filter operations
-      operations.forEach(op => op && op());
+      operations.forEach((op) => op && op());
     });
   }, [displayYear, thresholdValues]);
-  
+
   // Threshold changes are batched with debounce for better performance
   useEffect(() => {
     const handler = setTimeout(() => {
       applyThresholdFilter();
     }, 50); // 50ms debounce delay
-    
+
     return () => clearTimeout(handler);
   }, [thresholdValues, applyThresholdFilter]);
 
   // Optimized function to update which year's data is visible
-  const updateVisibleYear = useCallback((yearToShow: number) => {
-    if (!map.current || !mapIsReady.current) return;
-    
-    // Set state for UI display
-    setDisplayYear(yearToShow);
-    
-    requestAnimationFrame(() => {
-      // Get the year datasets we want to show
-      const yearDatasetMap = (window as any).yearDatasetMap as Record<number, string[]>;
-      const datasetsToShow = yearDatasetMap?.[yearToShow] || [];
-      
-      // Batch operations to minimize render cycles
-      const hideOps: (() => void)[] = [];
-      const showOps: (() => void)[] = [];
-      const filterOps: (() => void)[] = [];
-      
-      // Process all active layers
-      activeLayers.current.forEach(layerId => {
-        // Extract year from layerId (format: dataset-country-year)
-        const parts = layerId.split('-');
-        const layerYear = parts.length > 2 ? parseInt(parts[parts.length - 1]) : -1;
-        
-        if (!map.current?.getLayer(layerId)) return;
-        
-        if (layerYear === yearToShow) {
-          const visibility = map.current.getLayoutProperty(layerId, 'visibility');
-          const datasetCountryKey = parts.slice(0, parts.length - 1).join('-');
-          const shouldBeVisible = datasetsToShow.includes(datasetCountryKey);
-          
-          if (visibility === 'none' && shouldBeVisible) {
-            showOps.push(() => map.current?.setLayoutProperty(layerId, 'visibility', 'visible'));
-            const dataset = layerId.split('-')[0];
-            filterOps.push(() => 
-              map.current?.setFilter(layerId, [">=", ["get", "DN"], thresholdValues[dataset]])
+  const updateVisibleYear = useCallback(
+    (yearToShow: number) => {
+      if (!map.current || !mapIsReady.current) return;
+
+      // Set state for UI display
+      setDisplayYear(yearToShow);
+
+      requestAnimationFrame(() => {
+        // Get the year datasets we want to show
+        const yearDatasetMap = (window as unknown).yearDatasetMap as Record<
+          number,
+          string[]
+        >;
+        const datasetsToShow = yearDatasetMap?.[yearToShow] || [];
+
+        // Batch operations to minimize render cycles
+        const hideOps: (() => void)[] = [];
+        const showOps: (() => void)[] = [];
+        const filterOps: (() => void)[] = [];
+
+        // Process all active layers
+        activeLayers.current.forEach((layerId) => {
+          // Extract year from layerId (format: dataset-country-year)
+          const parts = layerId.split("-");
+          const layerYear =
+            parts.length > 2 ? parseInt(parts[parts.length - 1]) : -1;
+
+          if (!map.current?.getLayer(layerId)) return;
+
+          if (layerYear === yearToShow) {
+            const visibility = map.current.getLayoutProperty(
+              layerId,
+              "visibility"
             );
+            const datasetCountryKey = parts
+              .slice(0, parts.length - 1)
+              .join("-");
+            const shouldBeVisible = datasetsToShow.includes(datasetCountryKey);
+
+            if (visibility === "none" && shouldBeVisible) {
+              showOps.push(() =>
+                map.current?.setLayoutProperty(layerId, "visibility", "visible")
+              );
+              const dataset = layerId.split("-")[0];
+              filterOps.push(() =>
+                map.current?.setFilter(layerId, [
+                  ">=",
+                  ["get", "DN"],
+                  thresholdValues[dataset],
+                ])
+              );
+            }
+          } else {
+            const visibility = map.current.getLayoutProperty(
+              layerId,
+              "visibility"
+            );
+            if (visibility !== "none") {
+              hideOps.push(() =>
+                map.current?.setLayoutProperty(layerId, "visibility", "none")
+              );
+            }
           }
-        } else {
-          const visibility = map.current.getLayoutProperty(layerId, 'visibility');
-          if (visibility !== 'none') {
-            hideOps.push(() => map.current?.setLayoutProperty(layerId, 'visibility', 'none'));
-          }
-        }
+        });
+
+        hideOps.forEach((op) => op());
+        showOps.forEach((op) => op());
+        filterOps.forEach((op) => op());
       });
-      
-      hideOps.forEach(op => op());
-      showOps.forEach(op => op());
-      filterOps.forEach(op => op());
-    });
-  }, [thresholdValues]);
+    },
+    [thresholdValues]
+  );
 
   // Optimized animation step function using requestAnimationFrame
   const animateStep = useCallback(() => {
@@ -244,7 +283,8 @@ export default function Map() {
       return;
     }
 
-    const nextIndex = (currentYearIndexRef.current + 1) % yearSequence.current.length;
+    const nextIndex =
+      (currentYearIndexRef.current + 1) % yearSequence.current.length;
     currentYearIndexRef.current = nextIndex;
     const nextYear = yearSequence.current[nextIndex];
 
@@ -294,15 +334,18 @@ export default function Map() {
     },
     [animating, animateStep]
   );
-  
+
   // Change threshold value for a dataset
-  const handleThresholdChange = useCallback((dataset: string, value: number) => {
-    setThresholdValues(prev => ({
-      ...prev,
-      [dataset]: value
-    }));
-  }, []);
-  
+  const handleThresholdChange = useCallback(
+    (dataset: string, value: number) => {
+      setThresholdValues((prev) => ({
+        ...prev,
+        [dataset]: value,
+      }));
+    },
+    []
+  );
+
   // Function to load geospatial data from the backend
   const loadGeoData = async (
     datasets: DatasetType[],
@@ -350,15 +393,15 @@ export default function Map() {
       });
 
       const layersToKeep = new Set<string>();
-      const fetchPromises: Promise<any>[] = [];
+      const fetchPromises: Promise<unknown>[] = [];
       const layerPromises: Promise<void>[] = [];
       const yearDatasets: Record<number, string[]> = {};
-      
+
       for (const year of Object.keys(geoDataResponse).map(Number)) {
         if (!yearDatasets[year]) {
           yearDatasets[year] = [];
         }
-        
+
         for (const dataset of Object.keys(geoDataResponse[year])) {
           for (const country of Object.keys(geoDataResponse[year][dataset])) {
             const fileUrl = geoDataResponse[year][dataset][country];
@@ -373,7 +416,10 @@ export default function Map() {
                     cachedGeojsonData.current[fileUrl] = geojson;
                     return { fileUrl, geojson };
                   } catch (error) {
-                    console.error(`Failed to fetch GeoJSON from ${fileUrl}:`, error);
+                    console.error(
+                      `Failed to fetch GeoJSON from ${fileUrl}:`,
+                      error
+                    );
                     return { fileUrl, error };
                   }
                 })();
@@ -383,11 +429,13 @@ export default function Map() {
           }
         }
       }
-      
+
       await Promise.all(fetchPromises);
-      
-      const layersToRemove = activeLayers.current.filter(id => !layersToKeep.has(id));
-      
+
+      const layersToRemove = activeLayers.current.filter(
+        (id) => !layersToKeep.has(id)
+      );
+
       for (const layerId of layersToRemove) {
         if (map.current?.getLayer(layerId)) {
           map.current.removeLayer(layerId);
@@ -396,9 +444,11 @@ export default function Map() {
           map.current.removeSource(layerId);
         }
       }
-      
-      activeLayers.current = activeLayers.current.filter(id => !layersToRemove.includes(id));
-      
+
+      activeLayers.current = activeLayers.current.filter(
+        (id) => !layersToRemove.includes(id)
+      );
+
       for (const year of Object.keys(geoDataResponse).map(Number)) {
         for (const dataset of Object.keys(geoDataResponse[year])) {
           for (const country of Object.keys(geoDataResponse[year][dataset])) {
@@ -408,22 +458,31 @@ export default function Map() {
               if (map.current?.getLayer(layerId)) {
                 continue;
               }
-              
+
               const layerPromise = (async () => {
                 try {
                   const geojson = cachedGeojsonData.current[fileUrl];
                   if (!geojson) {
                     return;
                   }
-                  
+
                   // Analyze data for range values (only once per dataset)
-                  const useExistingRange = datasetRanges.current[dataset].min > 0 || 
-                                         datasetRanges.current[dataset].max > 0;
-                  
-                  let minDN = useExistingRange ? datasetRanges.current[dataset].min : Infinity;
-                  let maxDN = useExistingRange ? datasetRanges.current[dataset].max : 0;
-                  
-                  if (!useExistingRange && geojson.features && geojson.features.length > 0) {
+                  const useExistingRange =
+                    datasetRanges.current[dataset].min > 0 ||
+                    datasetRanges.current[dataset].max > 0;
+
+                  let minDN = useExistingRange
+                    ? datasetRanges.current[dataset].min
+                    : Infinity;
+                  let maxDN = useExistingRange
+                    ? datasetRanges.current[dataset].max
+                    : 0;
+
+                  if (
+                    !useExistingRange &&
+                    geojson.features &&
+                    geojson.features.length > 0
+                  ) {
                     for (let i = 0; i < geojson.features.length; i++) {
                       const feature = geojson.features[i];
                       const dn = feature.properties?.DN;
@@ -432,23 +491,23 @@ export default function Map() {
                         maxDN = Math.max(maxDN, dn);
                       }
                     }
-                    
+
                     if (minDN === Infinity) minDN = 1;
                     if (maxDN === 0) maxDN = 100;
-                    
+
                     datasetRanges.current[dataset] = {
                       min: minDN,
-                      max: maxDN
+                      max: maxDN,
                     };
                   }
-                  
+
                   if (!map.current?.getSource(layerId)) {
                     map.current?.addSource(layerId, {
                       type: "geojson",
-                      data: geojson as any,
+                      data: geojson as unknown,
                     });
                   }
-                  
+
                   if (dataset === "PopDensity") {
                     map.current?.addLayer({
                       id: layerId,
@@ -508,33 +567,33 @@ export default function Map() {
                       filter: [">=", ["get", "DN"], thresholdValues[dataset]],
                     });
                   }
-                  
+
                   if (!activeLayers.current.includes(layerId)) {
                     activeLayers.current.push(layerId);
                   }
-                  
+
                   map.current?.once("click", layerId, (e) => {
                     if (!e.features || e.features.length === 0) return;
-                    
+
                     const feature = e.features[0];
-                    const dn = feature.properties?.DN || 'N/A';
-                    
+                    const dn = feature.properties?.DN || "N/A";
+
                     const content = `<div style="font-size:12px">
                       <strong>${dataset} (${year})</strong><br/>
                       Country: ${country.replace("_", " ")}<br/>
                       Value: ${dn}
                     </div>`;
-                    
+
                     new mapboxgl.Popup({
                       closeButton: false,
                       closeOnClick: true,
-                      maxWidth: '200px'
+                      maxWidth: "200px",
                     })
                       .setLngLat(e.lngLat)
                       .setHTML(content)
                       .addTo(map.current!);
                   });
-                  
+
                   map.current?.once("mouseenter", layerId, () => {
                     map.current!.getCanvas().style.cursor = "pointer";
                   });
@@ -550,11 +609,11 @@ export default function Map() {
           }
         }
       }
-      
+
       await Promise.all(layerPromises);
-      
-      (window as any).yearDatasetMap = yearDatasets;
-      
+
+      (window as unknown).yearDatasetMap = yearDatasets;
+
       if (activeLayers.current.length === 0) {
         setError("No valid data found for the selected filters");
       } else {
@@ -583,10 +642,10 @@ export default function Map() {
     if (filters.thresholds) {
       setThresholdValues(filters.thresholds);
     }
-    
+
     loadGeoData(filters.datasets, filters.countries, filters.years);
   };
-  
+
   // Handle year selection via the slider
   const handleYearSelection = (index: number) => {
     if (animating) {
@@ -613,35 +672,68 @@ export default function Map() {
 
       {/* 3D Mode Toggle */}
       <div className="absolute top-4 right-4 z-30">
-        <button 
-          onClick={toggle3DMode} 
+        <button
+          onClick={toggle3DMode}
           className="bg-white text-gray-800 px-3 py-2 rounded-md shadow-lg flex items-center space-x-2 text-sm font-medium hover:bg-gray-100"
         >
-          <span>{is3DMode ? '2D Mode' : '3D Mode'}</span>
-          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-11a1 1 0 10-2 0v2H7a1 1 0 100 2h2v2a1 1 0 102 0v-2h2a1 1 0 100-2h-2V7z" clipRule="evenodd" />
+          <span>{is3DMode ? "2D Mode" : "3D Mode"}</span>
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            className="h-5 w-5"
+            viewBox="0 0 20 20"
+            fill="currentColor"
+          >
+            <path
+              fillRule="evenodd"
+              d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-11a1 1 0 10-2 0v2H7a1 1 0 100 2h2v2a1 1 0 102 0v-2h2a1 1 0 100-2h-2V7z"
+              clipRule="evenodd"
+            />
           </svg>
         </button>
       </div>
 
       {/* Data controls with collapse/expand functionality */}
-      <div className={`absolute top-4 left-0 z-20 transition-all duration-300 transform ${dataControlsExpanded ? 'translate-x-0' : '-translate-x-[calc(100%-40px)]'}`}>
-        <button 
+      <div
+        className={`absolute top-4 left-0 z-20 transition-all duration-300 transform ${
+          dataControlsExpanded
+            ? "translate-x-0"
+            : "-translate-x-[calc(100%-40px)]"
+        }`}
+      >
+        <button
           onClick={() => setDataControlsExpanded(!dataControlsExpanded)}
           className="absolute right-2 top-2 bg-blue-500 text-white rounded-full w-8 h-8 flex items-center justify-center z-30 shadow-md"
         >
           {dataControlsExpanded ? (
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-              <path fillRule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clipRule="evenodd" />
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              className="h-5 w-5"
+              viewBox="0 0 20 20"
+              fill="currentColor"
+            >
+              <path
+                fillRule="evenodd"
+                d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z"
+                clipRule="evenodd"
+              />
             </svg>
           ) : (
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-              <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              className="h-5 w-5"
+              viewBox="0 0 20 20"
+              fill="currentColor"
+            >
+              <path
+                fillRule="evenodd"
+                d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z"
+                clipRule="evenodd"
+              />
             </svg>
           )}
         </button>
         <div className="bg-white p-4 rounded-r-lg shadow-lg">
-          <DataControls 
+          <DataControls
             onApplyFilters={handleApplyFilters}
             datasetRanges={datasetRanges.current}
             thresholdValues={thresholdValues}
@@ -649,7 +741,7 @@ export default function Map() {
           />
         </div>
       </div>
-      
+
       {/* Legend */}
       {displayYear && (
         <div className="absolute top-16 right-4 bg-white p-3 rounded-lg shadow-lg z-20">
@@ -661,7 +753,9 @@ export default function Map() {
               <div className="flex justify-between items-center">
                 <div className="text-xs font-semibold">Population Density</div>
                 {thresholdValues.PopDensity > 0 && (
-                  <div className="text-xs">(min: {thresholdValues.PopDensity})</div>
+                  <div className="text-xs">
+                    (min: {thresholdValues.PopDensity})
+                  </div>
                 )}
               </div>
               <div className="flex items-center">
@@ -680,7 +774,9 @@ export default function Map() {
               <div className="flex justify-between items-center">
                 <div className="text-xs font-semibold">Precipitation</div>
                 {thresholdValues.Precipitation > 0 && (
-                  <div className="text-xs">(min: {thresholdValues.Precipitation})</div>
+                  <div className="text-xs">
+                    (min: {thresholdValues.Precipitation})
+                  </div>
                 )}
               </div>
               <div className="flex items-center">
