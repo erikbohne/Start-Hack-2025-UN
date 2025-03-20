@@ -23,7 +23,7 @@ export default function Map() {
   const animationSpeed = useRef<number>(2000); // 2 seconds per year by default
 
   // Data management
-  const cachedGeojsonData = useRef<{ [key: string]: unknown }>({});
+  const cachedGeojsonData = useRef<{ [key: string]: any }>({});
   const yearSequence = useRef<number[]>([]);
   const currentYearIndexRef = useRef<number>(0);
   const datasetCountryCombo = useRef<{ dataset: string; country: string }[]>(
@@ -68,14 +68,14 @@ export default function Map() {
 
         map.current = new mapboxgl.Map({
           container: mapContainer.current,
-          style: "mapbox://styles/mapbox/light-v11",
+          style: "mapbox://styles/adis123/cm2trla51000q01qw78sv431j",
           projection: !is3DMode ? "globe" : "mercator", // Toggle to opposite of current state
           zoom: zoom,
           center: center,
           attributionControl: true,
           maxZoom: 10,
           renderWorldCopies: false,
-        });
+        }); 
 
         const mapInstance = map.current;
 

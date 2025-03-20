@@ -64,7 +64,7 @@ export default function DataControls({
       prev.includes(dataset)
         ? prev.filter(d => d !== dataset)
         : [...prev, dataset]
-    );
+      );
   };
 
   // Handle toggling a country selection
@@ -125,20 +125,20 @@ export default function DataControls({
   };
 
   return (
-    <div className="p-4 max-w-md">
-      <h2 className="text-lg font-bold mb-3">Data Controls</h2>
+    <div className="p-4 max-w-md bg-white/10 backdrop-blur-[2px] rounded-lg border-0">
+      <h2 className="text-lg font-bold mb-3 text-black">Data Controls</h2>
       
       <div className="mb-4">
-        <h3 className="font-medium mb-1">Datasets</h3>
+        <h3 className="font-medium mb-1 text-black">Datasets</h3>
         <div className="flex flex-wrap gap-2">
           {datasetOptions.map(dataset => (
             <button
               key={dataset}
               onClick={() => toggleDataset(dataset)}
-              className={`px-3 py-1 rounded-full text-sm ${
+              className={`px-3 py-1 rounded-full text-sm backdrop-blur-sm ${
                 selectedDatasets.includes(dataset)
-                  ? 'bg-blue-500 text-white'
-                  : 'bg-gray-200'
+                  ? 'bg-white/40 text-black'
+                  : 'bg-white/20 text-black'
               }`}
             >
               {dataset.replace('_', ' ')}
@@ -148,16 +148,16 @@ export default function DataControls({
       </div>
       
       <div className="mb-4">
-        <h3 className="font-medium mb-1">Countries</h3>
+        <h3 className="font-medium mb-1 text-black">Countries</h3>
         <div className="flex flex-wrap gap-2">
           {countryOptions.map(country => (
             <button
               key={country}
               onClick={() => toggleCountry(country)}
-              className={`px-3 py-1 rounded-full text-sm ${
+              className={`px-3 py-1 rounded-full text-sm backdrop-blur-sm ${
                 selectedCountries.includes(country)
-                  ? 'bg-blue-500 text-white'
-                  : 'bg-gray-200'
+                  ? 'bg-white/40 text-black'
+                  : 'bg-white/20 text-black'
               }`}
             >
               {country.replace('_', ' ')}
@@ -167,16 +167,16 @@ export default function DataControls({
       </div>
       
       <div className="mb-4">
-        <h3 className="font-medium mb-1">Years</h3>
+        <h3 className="font-medium mb-1 text-black">Years</h3>
         <div className="flex flex-wrap gap-2">
           {yearOptions.map(year => (
             <button
               key={year}
               onClick={() => toggleYear(year)}
-              className={`px-3 py-1 rounded-full text-sm ${
+              className={`px-3 py-1 rounded-full text-sm backdrop-blur-sm ${
                 selectedYears.includes(year)
-                  ? 'bg-blue-500 text-white'
-                  : 'bg-gray-200'
+                  ? 'bg-white/40 text-black'
+                  : 'bg-white/20 text-black'
               }`}
             >
               {year}
@@ -188,21 +188,21 @@ export default function DataControls({
       <div className="mb-4">
         <button
           onClick={() => setShowThresholds(!showThresholds)}
-          className="flex items-center text-sm font-medium text-blue-600 mb-2"
+          className="flex items-center text-sm font-medium text-black mb-2"
         >
           <span>{showThresholds ? '▼' : '►'} Advanced Filtering Options</span>
         </button>
         
         {showThresholds && (
-          <div className="border-l-2 border-blue-200 pl-3 py-2">
-            <h3 className="font-medium mb-2 text-sm">Value Thresholds</h3>
+          <div className="border-l border-white/20 pl-3 py-2">
+            <h3 className="font-medium mb-2 text-sm text-black">Value Thresholds</h3>
             
             <div className="space-y-4">
               {selectedDatasets.includes('PopDensity') && (
                 <div>
                   <div className="flex justify-between">
-                    <label className="text-xs font-medium">Population Density</label>
-                    <span className="text-xs">Min: {localThresholds.PopDensity}</span>
+                    <label className="text-xs font-medium text-black">Population Density</label>
+                    <span className="text-xs text-black">Min: {localThresholds.PopDensity}</span>
                   </div>
                   <input
                     type="range"
@@ -210,9 +210,9 @@ export default function DataControls({
                     max={Math.ceil(datasetRanges.PopDensity.max)}
                     value={localThresholds.PopDensity}
                     onChange={(e) => handleLocalThresholdChange("PopDensity", parseInt(e.target.value))}
-                    className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                    className="w-full h-2 bg-white/20 rounded-lg appearance-none cursor-pointer"
                   />
-                  <div className="flex justify-between text-xs mt-1">
+                  <div className="flex justify-between text-xs mt-1 text-black">
                     <span>{Math.floor(datasetRanges.PopDensity.min)}</span>
                     <span>{Math.ceil(datasetRanges.PopDensity.max)}</span>
                   </div>
@@ -222,8 +222,8 @@ export default function DataControls({
               {selectedDatasets.includes('Precipitation') && (
                 <div>
                   <div className="flex justify-between">
-                    <label className="text-xs font-medium">Precipitation</label>
-                    <span className="text-xs">Min: {localThresholds.Precipitation}</span>
+                    <label className="text-xs font-medium text-black">Precipitation</label>
+                    <span className="text-xs text-black">Min: {localThresholds.Precipitation}</span>
                   </div>
                   <input
                     type="range"
@@ -231,9 +231,9 @@ export default function DataControls({
                     max={Math.ceil(datasetRanges.Precipitation.max)}
                     value={localThresholds.Precipitation}
                     onChange={(e) => handleLocalThresholdChange("Precipitation", parseInt(e.target.value))}
-                    className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                    className="w-full h-2 bg-white/20 rounded-lg appearance-none cursor-pointer"
                   />
-                  <div className="flex justify-between text-xs mt-1">
+                  <div className="flex justify-between text-xs mt-1 text-black">
                     <span>{Math.floor(datasetRanges.Precipitation.min)}</span>
                     <span>{Math.ceil(datasetRanges.Precipitation.max)}</span>
                   </div>
@@ -242,7 +242,7 @@ export default function DataControls({
               
               <button
                 onClick={resetThresholds}
-                className="w-full py-1.5 bg-gray-100 hover:bg-gray-200 rounded text-xs font-medium"
+                className="w-full py-1.5 bg-white/20 hover:bg-white/30 backdrop-blur-sm rounded text-xs font-medium text-black transition-colors duration-200"
               >
                 Reset All Thresholds
               </button>
@@ -253,7 +253,7 @@ export default function DataControls({
       
       <button
         onClick={handleApply}
-        className="w-full py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors"
+        className="w-full py-2 bg-white/30 hover:bg-white/40 text-black rounded-md transition-colors duration-200 backdrop-blur-sm font-medium"
       >
         Apply Filters
       </button>
