@@ -1,56 +1,50 @@
 "use client";
 
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useCallback } from "react";
 import mapboxgl from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
 import { fetchGeoData, fetchGeoJSON } from "@/lib/api";
 import { DatasetType, CountryType, GeoDataResponse } from "@/lib/types";
 import DataControls from "./DataControls";
+import { useMapContext } from "@/lib/MapContext";
 
 export default function Map() {
-  const mapContainer = useRef<HTMLDivElement>(null);
-  const map = useRef<mapboxgl.Map | null>(null);
-  const [isLoading, setIsLoading] = useState<boolean>(false);
-  const [error, setError] = useState<string | null>(null);
-  const [is3DMode, setIs3DMode] = useState<boolean>(false); // Toggle for 2D/3D mode
-  const [dataControlsExpanded, setDataControlsExpanded] =
-    useState<boolean>(true); // Control panel expansion state
-
-  // Animation state
-  const [animating, setAnimating] = useState<boolean>(false);
-  const [displayYear, setDisplayYear] = useState<number | null>(null);
-  const animationTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const animationSpeed = useRef<number>(2000); // 2 seconds per year by default
-
-  // Data management
-  const cachedGeojsonData = useRef<{ [key: string]: any }>({});
-  const yearSequence = useRef<number[]>([]);
-  const currentYearIndexRef = useRef<number>(0);
-  const datasetCountryCombo = useRef<{ dataset: string; country: string }[]>(
-    []
-  );
-  const activeLayers = useRef<string[]>([]);
-  const mapIsReady = useRef<boolean>(false);
-
-  // Data filters
-  const [thresholdValues, setThresholdValues] = useState<{
-    [dataset: string]: number;
-  }>({
-    PopDensity: 0,
-    Precipitation: 0,
-  });
-
-  // Range information for datasets
-  const datasetRanges = useRef<{
-    [dataset: string]: { min: number; max: number };
-  }>({
-    PopDensity: { min: 0, max: 100 },
-    Precipitation: { min: 0, max: 1000 },
-  });
+  // Get all values and functions from context
+  const {
+    mapContainer,
+    map,
+    mapIsReady,
+    isLoading,
+    setIsLoading,
+    error,
+    setError,
+    is3DMode,
+    dataControlsExpanded,
+    setDataControlsExpanded,
+    animating,
+    setAnimating,
+    displayYear,
+    setDisplayYear,
+    animationTimerRef,
+    animationSpeed,
+    cachedGeojsonData,
+    yearSequence,
+    currentYearIndexRef,
+    datasetCountryCombo,
+    activeLayers,
+    thresholdValues,
+    datasetRanges,
+    toggle3DMode: contextToggle3DMode,
+    updateVisibleYear: contextUpdateVisibleYear,
+    toggleAnimation: contextToggleAnimation,
+    changeAnimationSpeed: contextChangeAnimationSpeed,
+    handleThresholdChange,
+    handleYearSelection,
+  } = useMapContext();
 
   // Handle toggling between 2D and 3D mode
   const toggle3DMode = useCallback(() => {
-    setIs3DMode((prev) => !prev);
+    contextToggle3DMode();
 
     // Need to recreate the map when changing projections
     if (map.current) {
@@ -110,7 +104,7 @@ export default function Map() {
         mapInstance.scrollZoom.enable();
       }, 100);
     }
-  }, [is3DMode]);
+  }, [is3DMode, contextToggle3DMode]);
 
   // Initialize the map
   useEffect(() => {
@@ -164,7 +158,7 @@ export default function Map() {
         animationTimerRef.current = null;
       }
     };
-  }, [is3DMode]);
+  }, [is3DMode, setError]);
 
   // Apply threshold filter to layers with debouncing for better performance
   const applyThresholdFilter = useCallback(() => {
@@ -208,7 +202,7 @@ export default function Map() {
       if (!map.current || !mapIsReady.current) return;
 
       // Set state for UI display
-      setDisplayYear(yearToShow);
+      contextUpdateVisibleYear(yearToShow);
 
       requestAnimationFrame(() => {
         // Get the year datasets we want to show
@@ -273,7 +267,7 @@ export default function Map() {
         filterOps.forEach((op) => op());
       });
     },
-    [thresholdValues]
+    [thresholdValues, contextUpdateVisibleYear]
   );
 
   // Optimized animation step function using requestAnimationFrame
@@ -295,7 +289,7 @@ export default function Map() {
         requestAnimationFrame(animateStep);
       }, animationSpeed.current);
     }
-  }, [animating, updateVisibleYear]);
+  }, [animating, updateVisibleYear, setAnimating]);
 
   // Handle animation start/stop with performance optimizations
   useEffect(() => {
@@ -320,30 +314,19 @@ export default function Map() {
       setError("Select multiple years to animate");
       return;
     }
-    setAnimating((prev) => !prev);
-  }, []);
+    contextToggleAnimation();
+  }, [contextToggleAnimation, setError]);
 
   // Change animation speed
   const changeAnimationSpeed = useCallback(
     (speedMs: number) => {
-      animationSpeed.current = speedMs;
+      contextChangeAnimationSpeed(speedMs);
       if (animating && animationTimerRef.current !== null) {
         clearTimeout(animationTimerRef.current);
         animationTimerRef.current = setTimeout(animateStep, speedMs);
       }
     },
-    [animating, animateStep]
-  );
-
-  // Change threshold value for a dataset
-  const handleThresholdChange = useCallback(
-    (dataset: string, value: number) => {
-      setThresholdValues((prev) => ({
-        ...prev,
-        [dataset]: value,
-      }));
-    },
-    []
+    [animating, animateStep, contextChangeAnimationSpeed]
   );
 
   // Function to load geospatial data from the backend
@@ -640,19 +623,13 @@ export default function Map() {
     };
   }) => {
     if (filters.thresholds) {
-      setThresholdValues(filters.thresholds);
+      handleThresholdChange(
+        Object.keys(filters.thresholds)[0],
+        Object.values(filters.thresholds)[0]
+      );
     }
 
     loadGeoData(filters.datasets, filters.countries, filters.years);
-  };
-
-  // Handle year selection via the slider
-  const handleYearSelection = (index: number) => {
-    if (animating) {
-      setAnimating(false);
-    }
-    currentYearIndexRef.current = index;
-    updateVisibleYear(yearSequence.current[index]);
   };
 
   return (

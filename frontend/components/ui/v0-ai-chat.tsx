@@ -9,6 +9,8 @@ import {
     ChevronLeftIcon,
     ChevronRightIcon,
 } from "lucide-react";
+import { useMapContext } from "@/lib/MapContext";
+import { DatasetType, CountryType } from "@/lib/types";
 
 // Define message types
 type MessageType = "human" | "ai" | "instruction";
@@ -92,6 +94,9 @@ export function VercelV0Chat() {
         minHeight: 60,
         maxHeight: 200,
     });
+    
+    // Access the map context
+    const mapContext = useMapContext();
 
     const generateMessageId = () => {
         return `msg_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
@@ -137,6 +142,17 @@ export function VercelV0Chat() {
                 sender: "human",
                 content: value
             });
+            
+            // Add map context to the request
+            const mapState = {
+                is3DMode: mapContext.is3DMode,
+                displayYear: mapContext.displayYear,
+                yearSequence: mapContext.yearSequence.current,
+                activeDatasets: mapContext.datasetCountryCombo.current,
+                thresholdValues: mapContext.thresholdValues,
+                datasetRanges: mapContext.datasetRanges.current,
+                animating: mapContext.animating
+            };
 
             // Call the streaming API
             const response = await fetch("http://localhost:8000/chat/stream", {
@@ -144,7 +160,10 @@ export function VercelV0Chat() {
                 headers: {
                     "Content-Type": "application/json",
                 },
-                body: JSON.stringify(formattedMessages),
+                body: JSON.stringify({
+                    messages: formattedMessages,
+                    mapState: mapState
+                }),
             });
 
             if (!response.ok) {
@@ -166,13 +185,38 @@ export function VercelV0Chat() {
 
             // Read and process the stream
             let accumulatedContent = "";
+            let instruction = null;
+            
+            // Check for special instruction markers
+            const instructionStart = "<<INSTRUCTION>>";
+            const instructionEnd = "<</INSTRUCTION>>";
+            
             while (true) {
                 const { done, value } = await reader.read();
                 if (done) break;
 
                 // Decode the chunk
                 const chunk = new TextDecoder().decode(value);
-                accumulatedContent += chunk;
+                
+                // Check if this chunk contains an instruction
+                if (chunk.includes(instructionStart) && chunk.includes(instructionEnd)) {
+                    const instructionStartIndex = chunk.indexOf(instructionStart) + instructionStart.length;
+                    const instructionEndIndex = chunk.indexOf(instructionEnd);
+                    instruction = chunk.substring(instructionStartIndex, instructionEndIndex).trim();
+                    
+                    // Remove the instruction from the chunk
+                    const cleanedChunk = chunk.replace(
+                        chunk.substring(
+                            chunk.indexOf(instructionStart), 
+                            chunk.indexOf(instructionEnd) + instructionEnd.length
+                        ), 
+                        ""
+                    );
+                    
+                    accumulatedContent += cleanedChunk;
+                } else {
+                    accumulatedContent += chunk;
+                }
 
                 // Update the AI message with the accumulated content
                 setMessages(prev => 
@@ -182,6 +226,20 @@ export function VercelV0Chat() {
                             : msg
                     )
                 );
+            }
+            
+            // If we found an instruction, process it and add the result as a new message
+            if (instruction) {
+                const instructionResult = processInstruction(instruction);
+                
+                // Add the instruction result as a separate system message
+                setMessages(prev => [...prev, {
+                    id: generateMessageId(),
+                    type: "instruction",
+                    content: instructionResult,
+                    timestamp: new Date(),
+                    instructionData: { action: "processed", data: { instruction } }
+                }]);
             }
         } catch (error) {
             console.error("Error sending message:", error);
@@ -206,6 +264,69 @@ export function VercelV0Chat() {
             }
         }
     };
+
+    // Function to process instructions from AI
+    const processInstruction = useCallback((instruction: string) => {
+        try {
+            // Try to parse as JSON
+            const instructionData = JSON.parse(instruction);
+            
+            if (instructionData.action === 'toggle3DMode') {
+                mapContext.toggle3DMode();
+                return "I've switched the map to " + (mapContext.is3DMode ? "3D" : "2D") + " mode.";
+            }
+            
+            if (instructionData.action === 'changeYear' && instructionData.year) {
+                const yearIndex = mapContext.yearSequence.current.indexOf(instructionData.year);
+                if (yearIndex >= 0) {
+                    mapContext.handleYearSelection(yearIndex);
+                    return `I've set the year to ${instructionData.year}.`;
+                }
+                return "I couldn't find that year in the available data.";
+            }
+            
+            if (instructionData.action === 'toggleAnimation') {
+                mapContext.toggleAnimation();
+                return mapContext.animating ? "Started the animation." : "Stopped the animation.";
+            }
+            
+            if (instructionData.action === 'changeAnimationSpeed' && instructionData.speed) {
+                const speed = instructionData.speed === 'slow' ? 4000 : 
+                             instructionData.speed === 'medium' ? 2000 : 
+                             instructionData.speed === 'fast' ? 1000 : 2000;
+                             
+                mapContext.changeAnimationSpeed(speed);
+                return `Animation speed set to ${instructionData.speed}.`;
+            }
+            
+            if (instructionData.action === 'loadData' && 
+                instructionData.datasets && 
+                instructionData.countries && 
+                instructionData.years) {
+                
+                mapContext.loadGeoData(
+                    instructionData.datasets as DatasetType[],
+                    instructionData.countries as CountryType[],
+                    instructionData.years as number[]
+                );
+                
+                return "Loading the requested data...";
+            }
+            
+            if (instructionData.action === 'setThreshold' && 
+                instructionData.dataset && 
+                instructionData.value !== undefined) {
+                
+                mapContext.handleThresholdChange(instructionData.dataset, instructionData.value);
+                return `Set threshold for ${instructionData.dataset} to ${instructionData.value}.`;
+            }
+            
+            return "I couldn't understand that instruction.";
+        } catch (e) {
+            console.error("Failed to process instruction:", e);
+            return "I tried to perform an action but couldn't understand the instruction format.";
+        }
+    }, [mapContext]);
 
     return (
         <div className={`flex flex-col h-full bg-white/30 backdrop-blur-sm text-black transition-all duration-300 transform ${
@@ -279,6 +400,8 @@ export function VercelV0Chat() {
                                         "rounded-lg px-4 py-2 max-w-[80%] backdrop-blur-sm",
                                         message.type === "human"
                                             ? "bg-gray-200/70 text-black"
+                                            : message.type === "instruction"
+                                            ? "bg-blue-100/70 text-blue-800 border border-blue-200"
                                             : "bg-white/50 text-black"
                                     )}
                                 >
