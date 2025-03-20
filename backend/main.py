@@ -31,7 +31,6 @@ class DatasetEnum(str, Enum):
     LandCover = "LandCover"
 
 
-
 class CountryEnum(str, Enum):
     Burkina_Faso = "Burkina_Faso"
     Chad = "Chad"
@@ -59,7 +58,7 @@ def lookup_files(
     Constructs file URLs based on the dataset, country, and years.
     """
     files = {}
-    
+
     if dataset == DatasetEnum.PopDensity:
         popdensity_codes = {
             "Burkina_Faso": "bfa",
@@ -86,7 +85,7 @@ def lookup_files(
             files[year] = file_url
     else:
         raise HTTPException(status_code=400, detail="Dataset not supported")
-    
+
     return files
 
 
@@ -99,21 +98,23 @@ def lookup_region_files(
     files = {}
     region_country_map = {
         "Assaba_Hodh_El_Gharbi_Tagant": "Mauritania",
-        "Sahel_Est_Centre-Est": "Burkina_Faso"
+        "Sahel_Est_Centre-Est": "Burkina_Faso",
     }
-    
+
     country = region_country_map.get(region.value)
     if not country:
         raise HTTPException(
             status_code=400, detail=f"Region {region.value} not supported"
         )
-    
+
     # Fix region naming pattern based on directory structure
     if dataset == DatasetEnum.PopDensity:
         for year in years:
             # Pattern for PopDensity: Country_MergedSubregions_PopDensity_YYYY.geojson
             region_filename = f"{country}_MergedSubregions_PopDensity_{year}.geojson"
-            region_url = f"/static/Africa/PopDensity/subregions/{region.value}/{region_filename}"
+            region_url = (
+                f"/static/Africa/PopDensity/subregions/{region.value}/{region_filename}"
+            )
             files[year] = region_url
     elif dataset == DatasetEnum.Precipitation:
         for year in years:
@@ -123,14 +124,17 @@ def lookup_region_files(
             files[year] = region_url
     elif dataset == DatasetEnum.LandCover:
         for year in years:
-            # Keep the existing pattern for LandCover unless you find it's different
-            region_filename = f"{country}_MergedSubregions_LandCover_{year}.tif"
-            region_url = f"/static/Africa/LandCover/subregions/{region.value}/{region_filename}"
+            # Updated pattern for LandCover - using same pattern as Precipitation
+            region_filename = f"{country}_{region.value}_{year}.geojson"
+            region_url = (
+                f"/static/Africa/LandCover/subregions/{region.value}/{region_filename}"
+            )
             files[year] = region_url
     else:
         raise HTTPException(status_code=400, detail="Dataset not supported for regions")
-    
+
     return files
+
 
 # Use lru_cache to cache lookup results.
 # Note: lists are not hashable, so we convert the years list into a sorted tuple.
@@ -169,30 +173,32 @@ def get_files(
     Endpoint that receives a list of datasets, a list of countries, optional regions, and a list of years,
     then returns a nested dictionary structured as:
       { year: { dataset: { country: file_url } } }.
-      
+
     If regions are specified, country files are ignored and region files are returned instead:
       { year: { dataset: { region: file_url } } }.
     """
     result = {}
-    
+
     # Iterate over each year first to have it as the outermost key.
     for year in sorted(years):
         result[year] = {}
         for dataset in datasets:
             result[year][dataset.value] = {}
-            
+
             # If regions are specified, process regions
             if regions:
                 for region in regions:
                     try:
                         # Look up files for the single year in a tuple
-                        file_lookup = lookup_region_files_cached(dataset, region, (year,))
+                        file_lookup = lookup_region_files_cached(
+                            dataset, region, (year,)
+                        )
                         # Retrieve the file_url for the given year
                         file_url = file_lookup.get(year)
                         result[year][dataset.value][region.value] = file_url
                     except HTTPException as e:
                         result[year][dataset.value][region.value] = f"Error: {e.detail}"
-            
+
             # If no regions but countries specified, process countries
             elif countries:
                 for country in countries:
@@ -203,8 +209,10 @@ def get_files(
                         file_url = file_lookup.get(year)
                         result[year][dataset.value][country.value] = file_url
                     except HTTPException as e:
-                        result[year][dataset.value][country.value] = f"Error: {e.detail}"
-    
+                        result[year][dataset.value][country.value] = (
+                            f"Error: {e.detail}"
+                        )
+
     return result
 
 
@@ -226,13 +234,13 @@ def get_region_files(
     then returns a nested dictionary with region data.
     """
     result = {}
-    
+
     # Iterate over each year
     for year in sorted(years):
         result[year] = {}
         for dataset in datasets:
             result[year][dataset.value] = {}
-            
+
             for region in regions:
                 try:
                     # Look up files for the single year in a tuple
@@ -242,7 +250,7 @@ def get_region_files(
                     result[year][dataset.value][region.value] = file_url
                 except HTTPException as e:
                     result[year][dataset.value][region.value] = f"Error: {e.detail}"
-    
+
     return result
 
 
@@ -250,12 +258,15 @@ class ChatRequest(BaseModel):
     messages: List[Dict[str, str]]
     mapState: Dict[str, Any] = Field(default_factory=dict)
 
+
 @app.post("/chat/stream")
 async def stream_chat(request: ChatRequest):
     """
     Endpoint that streams a chat response with possible map instructions.
     """
-    return StreamingResponse(stream_geo_chat(request.messages, request.mapState), media_type="text/plain")
+    return StreamingResponse(
+        stream_geo_chat(request.messages, request.mapState), media_type="text/plain"
+    )
 
 
 if __name__ == "__main__":

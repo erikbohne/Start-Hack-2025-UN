@@ -313,11 +313,36 @@ export default function Map() {
       return;
     }
 
-    const nextIndex =
-      (currentYearIndexRef.current + 1) % yearSequence.current.length;
+    // Get the year dataset map to check which years have data
+    const yearDatasetMap = (window as unknown).yearDatasetMap as Record<number, string[]>;
+    
+    // Find the next valid year with data
+    let nextIndex = (currentYearIndexRef.current + 1) % yearSequence.current.length;
+    let nextYear = yearSequence.current[nextIndex];
+    let attempts = 0;
+    const maxAttempts = yearSequence.current.length; // Avoid infinite loop
+    
+    // Keep incrementing until we find a year with data or we've checked all years
+    while (
+      (!yearDatasetMap[nextYear] || yearDatasetMap[nextYear].length === 0) && 
+      attempts < maxAttempts
+    ) {
+      console.log(`Year ${nextYear} has no data, skipping...`);
+      nextIndex = (nextIndex + 1) % yearSequence.current.length;
+      nextYear = yearSequence.current[nextIndex];
+      attempts++;
+    }
+    
+    // If we've checked all years and none have data, stop animation
+    if (attempts >= maxAttempts) {
+      console.warn("No years have data. Stopping animation.");
+      setAnimating(false);
+      return;
+    }
+    
+    // Update the current index and display the next year
     currentYearIndexRef.current = nextIndex;
-    const nextYear = yearSequence.current[nextIndex];
-
+    console.log(`Animating to year ${nextYear} (index ${nextIndex})`);
     updateVisibleYear(nextYear);
 
     if (animating) {
@@ -350,8 +375,38 @@ export default function Map() {
       setError("Select multiple years to animate");
       return;
     }
+    
+    // Check how many years have data
+    const yearDatasetMap = (window as unknown).yearDatasetMap as Record<number, string[]>;
+    const yearsWithData = yearSequence.current.filter(
+      year => yearDatasetMap && yearDatasetMap[year] && yearDatasetMap[year].length > 0
+    );
+    
+    if (yearsWithData.length <= 1) {
+      setError("Not enough years with data to animate. Please select different years or datasets.");
+      return;
+    }
+    
+    // Start from a year with data if current year doesn't have data
+    const currentYear = yearSequence.current[currentYearIndexRef.current];
+    const currentYearHasData = yearDatasetMap && 
+                              yearDatasetMap[currentYear] && 
+                              yearDatasetMap[currentYear].length > 0;
+    
+    if (!currentYearHasData && yearsWithData.length > 0) {
+      // Find the index of the first year with data
+      const firstYearWithDataIndex = yearSequence.current.findIndex(
+        year => yearsWithData.includes(year)
+      );
+      
+      if (firstYearWithDataIndex >= 0) {
+        currentYearIndexRef.current = firstYearWithDataIndex;
+        updateVisibleYear(yearSequence.current[firstYearWithDataIndex]);
+      }
+    }
+    
     contextToggleAnimation();
-  }, [contextToggleAnimation, setError]);
+  }, [contextToggleAnimation, setError, updateVisibleYear]);
 
   // Change animation speed
   const changeAnimationSpeed = useCallback(
@@ -779,17 +834,88 @@ export default function Map() {
 
       await Promise.all(layerPromises);
 
-      // Store and log the year dataset map for debugging
-      (window as unknown).yearDatasetMap = yearDatasets;
-      console.log('Year dataset map:', yearDatasets);
+      // Create a more accurate dataset map that tracks which years actually have valid geojson data
+      const yearsWithValidData: Record<number, string[]> = {};
+      
+      for (const year of Object.keys(yearDatasets).map(Number)) {
+        // Only include years where we successfully loaded geojson data
+        const validDatasets = yearDatasets[year].filter(datasetKey => {
+          // For each dataset-entity combination, check if we have any geojson features
+          // Find the corresponding file URL
+          const datasetEntityParts = datasetKey.split('-');
+          const dataset = datasetEntityParts[0];
+          let entityKey: string;
+          
+          // Handle region vs country format
+          if (datasetKey.includes('-region-')) {
+            // For region: dataset-region-regionname
+            entityKey = datasetEntityParts.slice(2).join('-');
+          } else {
+            // For country: dataset-countryname
+            entityKey = datasetEntityParts.slice(1).join('-');
+          }
+          
+          // Look up the file URL
+          const fileUrl = geoDataResponse[year][dataset]?.[entityKey];
+          
+          if (!fileUrl || fileUrl.startsWith("Error:")) {
+            console.log(`No valid file URL for ${datasetKey} in year ${year}`);
+            return false;
+          }
+          
+          // Check if we have valid geojson data for this URL
+          const geojson = cachedGeojsonData.current[fileUrl];
+          
+          if (!geojson || !geojson.features || geojson.features.length === 0) {
+            console.log(`No valid GeoJSON features for ${datasetKey} in year ${year}`);
+            return false;
+          }
+          
+          // Check if the geojson has any valid DN values
+          const hasValidDNValues = geojson.features.some(f => 
+            typeof f.properties?.DN === 'number' && f.properties.DN > 0
+          );
+          
+          if (!hasValidDNValues) {
+            console.log(`No valid DN values for ${datasetKey} in year ${year}`);
+            return false;
+          }
+          
+          return true;
+        });
+        
+        if (validDatasets.length > 0) {
+          yearsWithValidData[year] = validDatasets;
+        }
+      }
+      
+      // Store and log the refined year dataset map for debugging
+      (window as unknown).yearDatasetMap = yearsWithValidData;
+      console.log('Refined year dataset map with valid data only:', yearsWithValidData);
 
       if (activeLayers.current.length === 0) {
         setError("No valid data found for the selected filters");
       } else {
         if (yearSequence.current.length > 0) {
-          const firstYear = yearSequence.current[0];
-          console.log(`Setting initial year to ${firstYear}. Active layers:`, activeLayers.current);
-          updateVisibleYear(firstYear);
+          // Find the first year that has valid data
+          const yearDatasetMap = (window as unknown).yearDatasetMap as Record<number, string[]>;
+          const yearsWithData = yearSequence.current.filter(
+            year => yearDatasetMap && yearDatasetMap[year] && yearDatasetMap[year].length > 0
+          );
+          
+          if (yearsWithData.length > 0) {
+            const firstValidYear = yearsWithData[0];
+            const firstValidYearIndex = yearSequence.current.indexOf(firstValidYear);
+            currentYearIndexRef.current = firstValidYearIndex;
+            
+            console.log(`Setting initial year to ${firstValidYear} (index ${firstValidYearIndex}). Active layers:`, activeLayers.current);
+            updateVisibleYear(firstValidYear);
+          } else {
+            // Fallback to first year even if it has no data
+            const firstYear = yearSequence.current[0];
+            console.log(`No years have valid data. Defaulting to ${firstYear}.`);
+            updateVisibleYear(firstYear);
+          }
         }
       }
     } catch (error) {
@@ -968,28 +1094,103 @@ export default function Map() {
             <span className="text-sm font-semibold text-gray-800">Year Timeline</span>
             <span className="text-xs text-gray-600">{Math.max(...yearSequence.current)}</span>
           </div>
+          
+          {/* Warning about missing years */}
+          {(() => {
+            const yearDatasetMap = (window as unknown).yearDatasetMap as Record<number, string[]>;
+            const yearsWithData = yearSequence.current.filter(
+              year => yearDatasetMap && yearDatasetMap[year] && yearDatasetMap[year].length > 0
+            );
+            
+            if (yearsWithData.length < yearSequence.current.length) {
+              const missingCount = yearSequence.current.length - yearsWithData.length;
+              const missingYears = yearSequence.current.filter(
+                year => !yearDatasetMap || !yearDatasetMap[year] || yearDatasetMap[year].length === 0
+              ).join(', ');
+              
+              return (
+                <div className="mb-2 text-xs bg-yellow-50 p-1.5 rounded border border-yellow-200 text-yellow-700">
+                  <strong>Note:</strong> {missingCount} year{missingCount > 1 ? 's' : ''} without data ({missingYears}) will be skipped during animation.
+                </div>
+              );
+            }
+            return null;
+          })()}
           <input
             type="range"
             min={0}
             max={yearSequence.current.length - 1}
             value={currentYearIndexRef.current}
-            onChange={(e) => handleYearSelection(parseInt(e.target.value))}
+            onChange={(e) => {
+              const index = parseInt(e.target.value);
+              // Get the year for this index
+              const year = yearSequence.current[index];
+              // Check if this year has data
+              const yearDatasetMap = (window as unknown).yearDatasetMap as Record<number, string[]>;
+              const hasData = yearDatasetMap && yearDatasetMap[year] && yearDatasetMap[year].length > 0;
+              
+              if (hasData) {
+                handleYearSelection(index);
+              } else {
+                // Find closest year with data
+                console.log(`Year ${year} has no data, finding closest year with data...`);
+                
+                // Check which years have data
+                const yearsWithDataIndices = yearSequence.current.map((yr, idx) => {
+                  return {
+                    year: yr,
+                    index: idx,
+                    hasData: yearDatasetMap && yearDatasetMap[yr] && yearDatasetMap[yr].length > 0
+                  };
+                }).filter(item => item.hasData);
+                
+                if (yearsWithDataIndices.length > 0) {
+                  // Find the closest year with data (by index distance)
+                  let closestIndex = yearsWithDataIndices[0].index;
+                  let minDistance = Math.abs(index - closestIndex);
+                  
+                  yearsWithDataIndices.forEach(item => {
+                    const distance = Math.abs(index - item.index);
+                    if (distance < minDistance) {
+                      minDistance = distance;
+                      closestIndex = item.index;
+                    }
+                  });
+                  
+                  console.log(`Found closest year with data: ${yearSequence.current[closestIndex]}`);
+                  handleYearSelection(closestIndex);
+                }
+              }
+            }}
             className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
           />
           <div className="flex justify-between mt-1">
-            {yearSequence.current.map((year, index) => (
-              <button
-                key={year}
-                onClick={() => handleYearSelection(index)}
-                className={`text-xs px-1 py-0.5 rounded transition-colors duration-200 ${
-                  currentYearIndexRef.current === index
-                    ? "bg-blue-500 text-white font-bold"
-                    : "bg-gray-100 hover:bg-gray-200 text-gray-700"
-                }`}
-              >
-                {year}
-              </button>
-            ))}
+            {yearSequence.current.map((year, index) => {
+              // Check if this year has data
+              const yearDatasetMap = (window as unknown).yearDatasetMap as Record<number, string[]>;
+              const hasData = yearDatasetMap && yearDatasetMap[year] && yearDatasetMap[year].length > 0;
+              
+              return (
+                <button
+                  key={year}
+                  onClick={() => handleYearSelection(index)}
+                  className={`text-xs px-1 py-0.5 rounded transition-colors duration-200 ${
+                    currentYearIndexRef.current === index
+                      ? "bg-blue-500 text-white font-bold"
+                      : hasData
+                        ? "bg-gray-100 hover:bg-gray-200 text-gray-700" 
+                        : "bg-gray-100 text-gray-400 opacity-50 cursor-not-allowed"
+                  }`}
+                  title={hasData ? `Show data for ${year}` : `No data available for ${year}`}
+                  disabled={!hasData}
+                >
+                  {year}
+                  {!hasData && (
+                    <span className="ml-1 text-xs">✗</span>
+                  )}
+                </button>
+              );
+            })}
           </div>
         </div>
       )}

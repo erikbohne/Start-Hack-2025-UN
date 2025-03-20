@@ -96,7 +96,7 @@ export default function DataControls({
   }, [thresholdValues]);
 
   // Dataset options from backend DatasetEnum
-  const datasetOptions: DatasetType[] = ['PopDensity', 'Precipitation'];
+  const datasetOptions: DatasetType[] = ['PopDensity', 'Precipitation', 'LandCover'];
   
   // Country options from backend CountryEnum
   const countryOptions: CountryType[] = [
