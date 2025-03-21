@@ -210,7 +210,23 @@ export default function DataControls({
       <h2 className="text-lg font-bold mb-3 text-gray-800">Data Controls</h2>
       
       <div className="mb-4">
-        <h3 className="font-medium mb-1 text-gray-700">Datasets</h3>
+        <div className="flex justify-between items-center mb-1">
+          <h3 className="font-medium text-gray-700">Datasets</h3>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setSelectedDatasets(datasetOptions)}
+              className="px-2 py-0.5 text-xs bg-blue-100 text-blue-700 hover:bg-blue-200 rounded-md transition-colors duration-200"
+            >
+              Select All
+            </button>
+            <button
+              onClick={() => setSelectedDatasets(['PopDensity'])} // Default to at least one dataset
+              className="px-2 py-0.5 text-xs bg-gray-100 text-gray-700 hover:bg-gray-200 rounded-md transition-colors duration-200"
+            >
+              Clear
+            </button>
+          </div>
+        </div>
         <div className="flex flex-wrap gap-2">
           {datasetOptions.map(dataset => (
             <button
@@ -257,7 +273,23 @@ export default function DataControls({
       {/* Show countries selector when in countries mode */}
       {viewMode === 'countries' && (
         <div className="mb-4">
-          <h3 className="font-medium mb-1 text-gray-700">Countries</h3>
+          <div className="flex justify-between items-center mb-1">
+            <h3 className="font-medium text-gray-700">Countries</h3>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setSelectedCountries(countryOptions)}
+                className="px-2 py-0.5 text-xs bg-blue-100 text-blue-700 hover:bg-blue-200 rounded-md transition-colors duration-200"
+              >
+                Select All
+              </button>
+              <button
+                onClick={() => setSelectedCountries(['Mali'])} // Default to at least one country
+                className="px-2 py-0.5 text-xs bg-gray-100 text-gray-700 hover:bg-gray-200 rounded-md transition-colors duration-200"
+              >
+                Clear
+              </button>
+            </div>
+          </div>
           <div className="flex flex-wrap gap-2">
             {countryOptions.map(country => (
               <button
@@ -279,7 +311,23 @@ export default function DataControls({
       {/* Show regions selector when in regions mode */}
       {viewMode === 'regions' && (
         <div className="mb-4">
-          <h3 className="font-medium mb-1 text-gray-700">Regions</h3>
+          <div className="flex justify-between items-center mb-1">
+            <h3 className="font-medium text-gray-700">Regions</h3>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setSelectedRegions(regionOptions)}
+                className="px-2 py-0.5 text-xs bg-blue-100 text-blue-700 hover:bg-blue-200 rounded-md transition-colors duration-200"
+              >
+                Select All
+              </button>
+              <button
+                onClick={() => setSelectedRegions(['Assaba_Hodh_El_Gharbi_Tagant'])} // Default to at least one region
+                className="px-2 py-0.5 text-xs bg-gray-100 text-gray-700 hover:bg-gray-200 rounded-md transition-colors duration-200"
+              >
+                Clear
+              </button>
+            </div>
+          </div>
           <div className="flex flex-wrap gap-2">
             {regionOptions.map(region => (
               <button
@@ -303,7 +351,23 @@ export default function DataControls({
       )}
       
       <div className="mb-4">
-        <h3 className="font-medium mb-1 text-gray-700">Years</h3>
+        <div className="flex justify-between items-center mb-1">
+          <h3 className="font-medium text-gray-700">Years</h3>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setSelectedYears(yearOptions)}
+              className="px-2 py-0.5 text-xs bg-blue-100 text-blue-700 hover:bg-blue-200 rounded-md transition-colors duration-200"
+            >
+              Select All
+            </button>
+            <button
+              onClick={() => setSelectedYears([])}
+              className="px-2 py-0.5 text-xs bg-gray-100 text-gray-700 hover:bg-gray-200 rounded-md transition-colors duration-200"
+            >
+              Clear All
+            </button>
+          </div>
+        </div>
         <div className="flex flex-wrap gap-2">
           {yearOptions.map(year => (
             <button

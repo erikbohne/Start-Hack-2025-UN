@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useCallback } from "react";
+import { useEffect, useCallback, useRef } from "react";
 import mapboxgl from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
 import { fetchGeoData, fetchGeoJSON } from "@/lib/api";
@@ -508,6 +508,8 @@ export default function Map() {
     console.log('Zoomed to area bounds:', {minLng, maxLng, minLat, maxLat});
   }, [map, mapIsReady, displayYear, activeLayers]);
   
+  // No special loading state tracking
+  
   // Function to load geospatial data from the backend
   const loadGeoData = async (
     datasets: DatasetType[],
@@ -527,12 +529,14 @@ export default function Map() {
     }
 
     try {
+      // Stop any ongoing animation
       setAnimating(false);
       if (animationTimerRef.current !== null) {
         clearTimeout(animationTimerRef.current);
         animationTimerRef.current = null;
       }
 
+      // Start loading state and clear any existing errors
       setIsLoading(true);
       setError(null);
 
@@ -991,15 +995,7 @@ export default function Map() {
             year => yearDatasetMap && yearDatasetMap[year] && yearDatasetMap[year].length > 0
           );
           
-          // Check if some years are missing data
-          const missingDataYears = yearSequence.current.filter(
-            year => !yearDatasetMap || !yearDatasetMap[year] || yearDatasetMap[year].length === 0
-          );
-          
-          if (missingDataYears.length > 0) {
-            // Notify user of years with missing data
-            setError(`Some years have no data available: ${missingDataYears.join(', ')}. These years will be skipped during animation.`);
-          }
+          // We'll check for missing data years after loading is complete
           
           if (yearsWithData.length > 0) {
             const firstValidYear = yearsWithData[0];
@@ -1012,6 +1008,16 @@ export default function Map() {
             // Add a slight delay to ensure layers are rendered before zooming
             setTimeout(() => {
               zoomToSelectedAreas();
+              
+              // Now that loading is complete and zoom is done, check for missing years
+              const missingDataYears = yearSequence.current.filter(
+                year => !yearDatasetMap || !yearDatasetMap[year] || yearDatasetMap[year].length === 0
+              );
+              
+              if (missingDataYears.length > 0) {
+                // Notify user of years with missing data
+                setError(`Some years have no data available: ${missingDataYears.join(', ')}. These years will be skipped during animation.`);
+              }
             }, 800);
           } else {
             // Fallback to first year even if it has no data
@@ -1437,10 +1443,10 @@ export default function Map() {
 
       {/* Loading indicator */}
       {isLoading && (
-        <div className="absolute top-36 right-4 bg-white p-3 rounded-lg shadow-lg z-20">
-          <div className="flex items-center">
+        <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-white p-4 rounded-lg shadow-lg z-50 border border-blue-200">
+          <div className="flex flex-col items-center">
             <svg
-              className="animate-spin h-5 w-5 mr-2 text-blue-500"
+              className="animate-spin h-10 w-10 mb-3 text-blue-500"
               xmlns="http://www.w3.org/2000/svg"
               fill="none"
               viewBox="0 0 24 24"
@@ -1459,7 +1465,8 @@ export default function Map() {
                 d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
               ></path>
             </svg>
-            <span className="text-gray-700">Loading data...</span>
+            <span className="text-gray-700 font-medium">Loading map data...</span>
+            <span className="text-gray-500 text-sm mt-1">This may take a moment</span>
           </div>
         </div>
       )}
