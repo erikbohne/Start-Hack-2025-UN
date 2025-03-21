@@ -93,6 +93,8 @@ export const MapProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }>({
     PopDensity: 1,
     Precipitation: 1,
+    EVI: 0.1,
+    NDVI: 0.1,
   });
 
   // Range information for datasets
@@ -101,6 +103,8 @@ export const MapProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }>({
     PopDensity: { min: 0, max: 0 },
     Precipitation: { min: 0, max: 0 },
+    EVI: { min: 0, max: 1 },
+    NDVI: { min: 0, max: 1 },
   });
 
   // These functions will be overridden by the Map component when it connects to context

@@ -33,11 +33,15 @@ export default function DataControls({
   onApplyFilters, 
   datasetRanges = {
     PopDensity: { min: 0, max: 100 },
-    Precipitation: { min: 0, max: 1000 }
+    Precipitation: { min: 0, max: 1000 },
+    EVI: { min: 0, max: 1 },
+    NDVI: { min: 0, max: 1 }
   },
   thresholdValues = {
     PopDensity: 1,
-    Precipitation: 1
+    Precipitation: 1,
+    EVI: 0.1,
+    NDVI: 0.1
   },
   onThresholdChange,
   activeDatasets,
@@ -117,7 +121,7 @@ export default function DataControls({
   }, [thresholdValues]);
 
   // Dataset options from backend DatasetEnum
-  const datasetOptions: DatasetType[] = ['PopDensity', 'Precipitation', 'LandCover'];
+  const datasetOptions: DatasetType[] = ['PopDensity', 'Precipitation', 'LandCover', 'EVI', 'NDVI'];
   
   // Country options from backend CountryEnum
   const countryOptions: CountryType[] = [
@@ -200,7 +204,9 @@ export default function DataControls({
   const resetThresholds = () => {
     const resetValues = {
       PopDensity: 1,
-      Precipitation: 1
+      Precipitation: 1,
+      EVI: 0.1,
+      NDVI: 0.1
     };
     setLocalThresholds(resetValues);
     
@@ -457,6 +463,56 @@ export default function DataControls({
                   <div className="flex justify-between text-xs mt-1 text-gray-600">
                     <span>{Math.floor(datasetRanges.Precipitation.min)}</span>
                     <span>{Math.ceil(datasetRanges.Precipitation.max)}</span>
+                  </div>
+                </div>
+              )}
+              
+              {selectedDatasets.includes('EVI') && (
+                <div>
+                  <div className="flex justify-between">
+                    <label className="text-xs font-medium text-gray-700">EVI</label>
+                    <span className="text-xs text-gray-600">Min: {localThresholds.EVI.toFixed(2)}</span>
+                  </div>
+                  <input
+                    type="range"
+                    min={0}
+                    max={1}
+                    step={0.01}
+                    value={localThresholds.EVI}
+                    onChange={(e) => handleLocalThresholdChange("EVI", parseFloat(e.target.value))}
+                    className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                  />
+                  <div className="flex justify-between text-xs mt-1 text-gray-600">
+                    <span>0.00</span>
+                    <span>1.00</span>
+                  </div>
+                  <div className="text-xs text-gray-500 mt-1">
+                    <span>Enhanced Vegetation Index (0.0-1.0)</span>
+                  </div>
+                </div>
+              )}
+              
+              {selectedDatasets.includes('NDVI') && (
+                <div>
+                  <div className="flex justify-between">
+                    <label className="text-xs font-medium text-gray-700">NDVI</label>
+                    <span className="text-xs text-gray-600">Min: {localThresholds.NDVI.toFixed(2)}</span>
+                  </div>
+                  <input
+                    type="range"
+                    min={0}
+                    max={1}
+                    step={0.01}
+                    value={localThresholds.NDVI}
+                    onChange={(e) => handleLocalThresholdChange("NDVI", parseFloat(e.target.value))}
+                    className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                  />
+                  <div className="flex justify-between text-xs mt-1 text-gray-600">
+                    <span>0.00</span>
+                    <span>1.00</span>
+                  </div>
+                  <div className="text-xs text-gray-500 mt-1">
+                    <span>Normalized Difference Vegetation Index (0.0-1.0)</span>
                   </div>
                 </div>
               )}
