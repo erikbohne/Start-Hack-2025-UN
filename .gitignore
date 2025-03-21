@@ -8,7 +8,8 @@ data/*
 .env.*.local
 
 # Data directory
-backend/vectorized/
+backend/geofiles/
+backend/data/
 
 # dependencies
 node_modules/
