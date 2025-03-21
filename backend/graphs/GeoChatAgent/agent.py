@@ -7,7 +7,8 @@ from graphs.GeoChatAgent.utils.nodes import (
     chat_agent,
     instructions,
     create_instructions,
-    analyze_data, is_more_instructions,
+    analyze_data,
+    is_more_instructions,
 )
 from graphs.GeoChatAgent.utils.models import MapBoxInstruction
 import json
@@ -29,8 +30,8 @@ workflow.add_conditional_edges(
     is_more_instructions,
     {
         "instructions": "instructions",  # If more instructions, loop back
-        "chat_agent": END  # If no more instructions, end
-    }
+        "chat_agent": END,  # If no more instructions, end
+    },
 )
 
 workflow.add_conditional_edges(START, route_user_message)
@@ -46,13 +47,13 @@ async def stream_geo_chat(
         [m.get("content", "") for m in messages],
     )
     print("Map state:", mapState)
-    
+
     # Reset the sent_instructions set for this conversation
     if hasattr(stream_geo_chat, "sent_instructions"):
         stream_geo_chat.sent_instructions = set()
     else:
         stream_geo_chat.sent_instructions = set()
-    
+
     formatted_messages = []
     for message in messages:
         if message["sender"] == "human":
@@ -113,17 +114,14 @@ async def stream_geo_chat(
         "messages": formatted_messages,
         "map_context": map_state_description if mapState else None,
     }
-    
-    async for response in graph.astream_events(
-        initial_state, version="v2"
-    ):
-        
+
+    async for response in graph.astream_events(initial_state, version="v2"):
         data = response.get("data", {})
 
         # Track which instructions we have already sent to avoid duplicates
         if not hasattr(stream_geo_chat, "sent_instructions"):
             stream_geo_chat.sent_instructions = set()
-            
+
         # Handle direct output instructions
         if isinstance(data.get("output"), MapBoxInstruction):
             instruction = {
@@ -132,7 +130,7 @@ async def stream_geo_chat(
                 "data": data.get("output").data,
             }
             instruction_json = json.dumps(instruction)
-            
+
             # Only send if we haven't sent this exact instruction before
             instruction_hash = hash(instruction_json)
             if instruction_hash not in stream_geo_chat.sent_instructions:

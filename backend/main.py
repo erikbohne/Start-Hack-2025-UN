@@ -29,6 +29,8 @@ class DatasetEnum(str, Enum):
     PopDensity = "PopDensity"
     Precipitation = "Precipitation"
     LandCover = "LandCover"
+    EVI = "EVI"
+    NDVI = "NDVI"
 
 
 class CountryEnum(str, Enum):
@@ -83,6 +85,16 @@ def lookup_files(
             filename = f"Precipitation_{country.value.replace('_', ' ')}_{year}.geojson"
             file_url = f"/static/Africa/Precipitation/{country.value}/{filename}"
             files[year] = file_url
+    elif dataset == DatasetEnum.EVI:
+        for year in years:
+            filename = f"EVI_{country.value}_{year}.geojson"
+            file_url = f"/static/Africa/EVI/{country.value}/{filename}"
+            files[year] = file_url
+    elif dataset == DatasetEnum.NDVI:
+        for year in years:
+            filename = f"NDVI_{country.value}_{year}.geojson"
+            file_url = f"/static/Africa/NDVI/{country.value}/{filename}"
+            files[year] = file_url
     else:
         raise HTTPException(status_code=400, detail="Dataset not supported")
 
@@ -128,6 +140,22 @@ def lookup_region_files(
             region_filename = f"{country}_{region.value}_{year}.geojson"
             region_url = (
                 f"/static/Africa/LandCover/subregions/{region.value}/{region_filename}"
+            )
+            files[year] = region_url
+    elif dataset == DatasetEnum.EVI:
+        for year in years:
+            # Pattern for EVI: EVI_YYYY.geojson
+            region_filename = f"EVI_{year}.geojson"
+            region_url = (
+                f"/static/Africa/EVI/subregions/{region.value}/{region_filename}"
+            )
+            files[year] = region_url
+    elif dataset == DatasetEnum.NDVI:
+        for year in years:
+            # Pattern for NDVI: NDVI_YYYY.geojson
+            region_filename = f"NDVI_{year}.geojson"
+            region_url = (
+                f"/static/Africa/NDVI/subregions/{region.value}/{region_filename}"
             )
             files[year] = region_url
     else:

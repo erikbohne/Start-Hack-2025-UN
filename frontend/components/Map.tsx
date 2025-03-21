@@ -500,10 +500,21 @@ export default function Map() {
   // Change animation speed
   const changeAnimationSpeed = useCallback(
     (speedMs: number) => {
+      // Update the animation speed in the context
       contextChangeAnimationSpeed(speedMs);
-      if (animating && animationTimerRef.current !== null) {
-        clearTimeout(animationTimerRef.current);
-        animationTimerRef.current = setTimeout(animateStep, speedMs);
+      
+      // If currently animating, restart the animation with the new speed
+      if (animating) {
+        // Clear any existing timer
+        if (animationTimerRef.current !== null) {
+          clearTimeout(animationTimerRef.current);
+          animationTimerRef.current = null;
+        }
+        
+        // Start a new animation step with the updated speed
+        animationTimerRef.current = setTimeout(() => {
+          requestAnimationFrame(animateStep);
+        }, speedMs);
       }
     },
     [animating, animateStep, contextChangeAnimationSpeed]
@@ -908,6 +919,134 @@ export default function Map() {
                         [">", ["to-number", ["get", "DN"], -1], 0], // Only show positive values
                       ],
                     });
+                  } else if (dataset === "EVI") {
+                    map.current?.addLayer({
+                      id: layerId,
+                      type: "fill",
+                      source: layerId,
+                      maxzoom: 12,
+                      paint: {
+                        "fill-color": [
+                          "case",
+                          // Check if DN is not a number or null/undefined
+                          [
+                            "any",
+                            ["==", ["typeof", ["get", "DN"]], "string"],
+                            ["==", ["get", "DN"], null],
+                          ],
+                          "rgba(0, 0, 0, 0)", // Transparent for N/A values
+                          [
+                            "interpolate",
+                            ["linear"],
+                            ["get", "DN"],
+                            minDN,
+                            "rgba(255, 255, 229, 0.9)", // Light yellow
+                            minDN + (maxDN - minDN) * 0.25,
+                            "rgba(247, 252, 185, 0.9)", // Light green-yellow
+                            minDN + (maxDN - minDN) * 0.5,
+                            "rgba(173, 221, 142, 0.9)", // Medium green
+                            minDN + (maxDN - minDN) * 0.75,
+                            "rgba(49, 163, 84, 0.9)", // Bright green
+                            maxDN,
+                            "rgba(0, 104, 55, 0.9)", // Dark green
+                          ],
+                        ],
+                        "fill-outline-color": [
+                          "case",
+                          [
+                            "any",
+                            ["==", ["typeof", ["get", "DN"]], "string"],
+                            ["==", ["get", "DN"], null],
+                          ],
+                          "rgba(0, 0, 0, 0)", // Transparent for N/A values
+                          "rgba(0, 0, 0, 0.4)", // Darker outline for valid values
+                        ],
+                        "fill-opacity": [
+                          "case",
+                          ["<=", ["get", "DN"], 0],
+                          0, // Make zero or negative values transparent
+                          0.9, // Normal opacity for positive values
+                        ],
+                      },
+                      layout: {
+                        visibility: "none",
+                      },
+                      // Enhanced filter for valid values
+                      filter: [
+                        "all",
+                        ["has", "DN"], // Make sure DN property exists
+                        [
+                          ">=",
+                          ["to-number", ["get", "DN"], -1],
+                          thresholdValues[dataset],
+                        ],
+                        [">", ["to-number", ["get", "DN"], -1], 0], // Only show positive values
+                      ],
+                    });
+                  } else if (dataset === "NDVI") {
+                    map.current?.addLayer({
+                      id: layerId,
+                      type: "fill",
+                      source: layerId,
+                      maxzoom: 12,
+                      paint: {
+                        "fill-color": [
+                          "case",
+                          // Check if DN is not a number or null/undefined
+                          [
+                            "any",
+                            ["==", ["typeof", ["get", "DN"]], "string"],
+                            ["==", ["get", "DN"], null],
+                          ],
+                          "rgba(0, 0, 0, 0)", // Transparent for N/A values
+                          [
+                            "interpolate",
+                            ["linear"],
+                            ["get", "DN"],
+                            minDN,
+                            "rgba(255, 255, 255, 0.9)", // White
+                            minDN + (maxDN - minDN) * 0.25,
+                            "rgba(199, 233, 192, 0.9)", // Light green
+                            minDN + (maxDN - minDN) * 0.5,
+                            "rgba(161, 217, 155, 0.9)", // Medium green
+                            minDN + (maxDN - minDN) * 0.75,
+                            "rgba(116, 196, 118, 0.9)", // Darker green
+                            maxDN,
+                            "rgba(69, 117, 18, 0.9)", // Forest green
+                          ],
+                        ],
+                        "fill-outline-color": [
+                          "case",
+                          [
+                            "any",
+                            ["==", ["typeof", ["get", "DN"]], "string"],
+                            ["==", ["get", "DN"], null],
+                          ],
+                          "rgba(0, 0, 0, 0)", // Transparent for N/A values
+                          "rgba(0, 0, 0, 0.4)", // Darker outline for valid values
+                        ],
+                        "fill-opacity": [
+                          "case",
+                          ["<=", ["get", "DN"], 0],
+                          0, // Make zero or negative values transparent
+                          0.9, // Normal opacity for positive values
+                        ],
+                      },
+                      layout: {
+                        visibility: "none",
+                      },
+                      // Enhanced filter for valid values
+                      filter: [
+                        "all",
+                        ["has", "DN"], // Make sure DN property exists
+                        [
+                          ">=",
+                          ["to-number", ["get", "DN"], -1],
+                          thresholdValues[dataset],
+                        ],
+                        [">", ["to-number", ["get", "DN"], -1], 0], // Only show positive values
+                      ],
+                    });
                   } else {
                     map.current?.addLayer({
                       id: layerId,
@@ -995,18 +1134,20 @@ export default function Map() {
 
                     const isRegionLayer = layerId.includes("-region-");
 
-                    const title =
-                      dataset === "PopDensity" ? "Population Density" : dataset;
+                    let title = dataset;
+                    if (dataset === "PopDensity") title = "Population Density";
+                    else if (dataset === "EVI") title = "Enhanced Vegetation Index";
+                    else if (dataset === "NDVI") title = "Normalized Difference Vegetation Index";
+                    
                     const locationPrefix = isRegionLayer ? "Region" : "Country";
                     const locationDisplay = entityKey.replace(/_/g, " ");
                     const valueLabel =
                       dataset === "PopDensity" ? "Density" : "Value";
-                    const units =
-                      dataset === "PopDensity"
-                        ? "people/km²"
-                        : dataset === "Precipitation"
-                        ? "mm"
-                        : "";
+                    
+                    let units = "";
+                    if (dataset === "PopDensity") units = "people/km²";
+                    else if (dataset === "Precipitation") units = "mm";
+                    else if (dataset === "EVI" || dataset === "NDVI") units = "index";
 
                     const content = `<div style="font-size:12px">
                       <strong>${title} (${year})</strong><br/>
@@ -1362,7 +1503,7 @@ export default function Map() {
           {datasetCountryCombo.current.some(
             ({ dataset }) => dataset === "Precipitation"
           ) && (
-            <div>
+            <div className="mb-3">
               <div className="flex justify-between items-center">
                 <div className="text-xs font-semibold text-gray-700">
                   Precipitation
@@ -1403,6 +1544,48 @@ export default function Map() {
                   )}{" "}
                   mm
                 </span>
+              </div>
+            </div>
+          )}
+          {datasetCountryCombo.current.some(
+            ({ dataset }) => dataset === "EVI"
+          ) && (
+            <div className="mb-3">
+              <div className="flex justify-between items-center">
+                <div className="text-xs font-semibold text-gray-700">
+                  Enhanced Vegetation Index (EVI)
+                </div>
+                <div className="text-xs text-gray-600">
+                  (min: {thresholdValues.EVI.toFixed(2)})
+                </div>
+              </div>
+              <div className="flex items-center">
+                <div className="w-full h-4 bg-gradient-to-r from-[rgb(255,255,229)] to-[rgb(0,104,55)] rounded-sm"></div>
+              </div>
+              <div className="flex justify-between w-full text-xs mt-1 text-gray-600">
+                <span>{thresholdValues.EVI.toFixed(2)}</span>
+                <span>1.00</span>
+              </div>
+            </div>
+          )}
+          {datasetCountryCombo.current.some(
+            ({ dataset }) => dataset === "NDVI"
+          ) && (
+            <div>
+              <div className="flex justify-between items-center">
+                <div className="text-xs font-semibold text-gray-700">
+                  Normalized Difference Vegetation Index (NDVI)
+                </div>
+                <div className="text-xs text-gray-600">
+                  (min: {thresholdValues.NDVI.toFixed(2)})
+                </div>
+              </div>
+              <div className="flex items-center">
+                <div className="w-full h-4 bg-gradient-to-r from-[rgb(255,255,255)] to-[rgb(69,117,18)] rounded-sm"></div>
+              </div>
+              <div className="flex justify-between w-full text-xs mt-1 text-gray-600">
+                <span>{thresholdValues.NDVI.toFixed(2)}</span>
+                <span>1.00</span>
               </div>
             </div>
           )}
@@ -1637,9 +1820,10 @@ export default function Map() {
               onClick={() => changeAnimationSpeed(4000)}
               className={`px-2 py-1 rounded-md text-xs transition-colors duration-200 ${
                 animationSpeed.current === 4000
-                  ? "bg-blue-500 text-white"
+                  ? "bg-blue-500 text-white font-semibold"
                   : "bg-gray-200 text-gray-700 hover:bg-gray-300"
               }`}
+              aria-pressed={animationSpeed.current === 4000}
             >
               Slow
             </button>
@@ -1647,9 +1831,10 @@ export default function Map() {
               onClick={() => changeAnimationSpeed(2000)}
               className={`px-2 py-1 rounded-md text-xs transition-colors duration-200 ${
                 animationSpeed.current === 2000
-                  ? "bg-blue-500 text-white"
+                  ? "bg-blue-500 text-white font-semibold"
                   : "bg-gray-200 text-gray-700 hover:bg-gray-300"
               }`}
+              aria-pressed={animationSpeed.current === 2000}
             >
               Medium
             </button>
@@ -1657,9 +1842,10 @@ export default function Map() {
               onClick={() => changeAnimationSpeed(1000)}
               className={`px-2 py-1 rounded-md text-xs transition-colors duration-200 ${
                 animationSpeed.current === 1000
-                  ? "bg-blue-500 text-white"
+                  ? "bg-blue-500 text-white font-semibold"
                   : "bg-gray-200 text-gray-700 hover:bg-gray-300"
               }`}
+              aria-pressed={animationSpeed.current === 1000}
             >
               Fast
             </button>
