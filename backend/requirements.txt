@@ -1,0 +1,5 @@
+rasterio==1.3.9
+numpy>=1.26.0
+matplotlib>=3.8.0
+imageio>=2.31.0
+Pillow>=10.0.0

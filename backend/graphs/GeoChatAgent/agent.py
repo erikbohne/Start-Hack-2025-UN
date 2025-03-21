@@ -2,7 +2,7 @@ from langgraph.graph import START, END, StateGraph
 from typing import List, Dict, Any, AsyncGenerator
 from langchain_core.messages import HumanMessage, AIMessage
 from graphs.GeoChatAgent.utils.state import GraphState
-from graphs.GeoChatAgent.utils.nodes import route_user_message, chat_agent, instructions, create_instructions, analyze_data, is_more_instructions
+from graphs.GeoChatAgent.utils.nodes import route_user_message, chat_agent, instructions, create_instructions, analyze_data, create_gif_timeline, is_more_instructions
 from graphs.GeoChatAgent.utils.models import MapBoxInstruction
 import json
 
@@ -12,10 +12,12 @@ workflow.add_node("chat_agent", chat_agent)
 workflow.add_node("create_instructions", create_instructions)
 workflow.add_node("instructions", instructions)
 workflow.add_node("analyze_data", analyze_data)
+workflow.add_node("create_gif_timeline", create_gif_timeline)
 
 workflow.add_edge("chat_agent", END)
 workflow.add_edge("create_instructions", "instructions")
 workflow.add_edge("analyze_data", END)
+workflow.add_edge("create_gif_timeline", END)
 
 # Add conditional edge for instructions
 workflow.add_conditional_edges(
@@ -116,6 +118,26 @@ async def stream_geo_chat(messages: List[Dict[str, Any]], mapState: Dict[str, An
                 stream_geo_chat.sent_instructions.add(instruction_hash)
                 yield f"INSTRUCTION:{instruction_json}"
                 print(f"Yielding instruction #{instruction_count}: {instruction_json}")
+            continue
+            
+        # Handle frontend_actions (including timeline GIFs)
+        if "frontend_actions" in data and isinstance(data["frontend_actions"], list):
+            for action in data["frontend_actions"]:
+                if isinstance(action, MapBoxInstruction):
+                    instruction = {
+                        "type": "instruction",
+                        "action": action.action.value,
+                        "data": action.data
+                    }
+                    instruction_json = json.dumps(instruction)
+                    
+                    # Only send if we haven't sent this exact instruction before
+                    instruction_hash = hash(instruction_json)
+                    if instruction_hash not in stream_geo_chat.sent_instructions:
+                        instruction_count += 1
+                        stream_geo_chat.sent_instructions.add(instruction_hash)
+                        yield f"INSTRUCTION:{instruction_json}"
+                        print(f"Yielding frontend action #{instruction_count}: {action.action.value}")
             continue
         chunk_obj = data.get("chunk")
         
