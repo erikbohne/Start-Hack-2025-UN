@@ -70,7 +70,7 @@ export const MapProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [is3DMode, setIs3DMode] = useState<boolean>(false);
-  const [dataControlsExpanded, setDataControlsExpanded] = useState<boolean>(true);
+  const [dataControlsExpanded, setDataControlsExpanded] = useState<boolean>(false);
 
   // Animation state
   const [animating, setAnimating] = useState<boolean>(false);

@@ -11,6 +11,8 @@ import {
 } from "lucide-react";
 import { useMapContext } from "@/lib/MapContext";
 import { DatasetType, CountryType } from "@/lib/types";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 // Define message types
 type MessageType = "human" | "ai" | "instruction";
@@ -515,7 +517,7 @@ export function VercelV0Chat() {
     }, [mapContext]);
 
     return (
-        <div className={`flex flex-col h-full w-80 bg-white/30 backdrop-blur-sm text-black transition-all duration-300 transform ${
+        <div className={`flex flex-col h-full w-[500px] bg-white/30 backdrop-blur-sm text-black transition-all duration-300 transform ${
             isChatExpanded ? 'translate-x-0' : 'translate-x-[calc(100%-40px)]'
         }`}>
             <button
@@ -591,7 +593,43 @@ export function VercelV0Chat() {
                                             : "bg-white/50 text-black"
                                     )}
                                 >
-                                    {message.content}
+                                    {message.type === "ai" ? (
+                                        <div className="chat-markdown">
+                                            <ReactMarkdown
+                                                remarkPlugins={[remarkGfm]}
+                                                components={{
+                                                    table: (props) => (
+                                                    <table
+                                                        className="table-auto border-collapse border border-gray-300"
+                                                        {...props}
+                                                    />
+                                                    ),
+                                                    th: (props) => (
+                                                    <th
+                                                        className="border border-gray-300 px-4 py-2 bg-gray-100"
+                                                        {...props}
+                                                    />
+                                                    ),
+                                                    td: (props) => (
+                                                    <td
+                                                        className="border border-gray-300 px-4 py-2"
+                                                        {...props}
+                                                    />
+                                                    ),
+                                                    a: (props) => (
+                                                    <a
+                                                        className="text-blue-500 hover:underline"
+                                                        {...props}
+                                                    />
+                                                    ),
+                                                }}
+                                                >
+                                                {message.content}
+                                            </ReactMarkdown>
+                                        </div>
+                                    ) : (
+                                        message.content
+                                    )}
                                 </div>
                             </div>
                         ))}
