@@ -1,7 +1,7 @@
 /**
  * Dataset types matching the backend DatasetEnum
  */
-export type DatasetType = 'PopDensity' | 'Precipitation' | 'LandCover';
+export type DatasetType = 'PopDensity' | 'Precipitation' | 'LandCover' | 'EVI' | 'NDVI';
 
 /**
  * Country types matching the backend CountryEnum
