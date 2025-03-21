@@ -350,15 +350,26 @@ export function VercelV0Chat() {
                         years: instructionData.data.years
                     });
                     
-                    // Set threshold values if included
-                    if (instructionData.data.thresholds && typeof instructionData.data.thresholds === 'object') {
-                        Object.entries(instructionData.data.thresholds).forEach(([dataset, value]) => {
-                            if (typeof value === 'number') {
-                                mapContext.handleThresholdChange(dataset, value);
-                                console.log(`Set threshold for ${dataset} to ${value}`);
-                            }
-                        });
-                    }
+                    // Set threshold values, ensuring minimum of 1 for each dataset
+                    const thresholds = instructionData.data.thresholds && typeof instructionData.data.thresholds === 'object' 
+                        ? {...instructionData.data.thresholds} 
+                        : {};
+                        
+                    // Ensure all datasets have at least threshold of 1
+                    const allDatasets = instructionData.data.datasets as DatasetType[];
+                    allDatasets.forEach(dataset => {
+                        // If threshold is not specified or less than 1, set it to 1
+                        const currentValue = thresholds[dataset];
+                        if (typeof currentValue !== 'number' || currentValue < 1) {
+                            thresholds[dataset] = 1;
+                        }
+                    });
+                    
+                    // Apply all thresholds
+                    Object.entries(thresholds).forEach(([dataset, value]) => {
+                        mapContext.handleThresholdChange(dataset, value as number);
+                        console.log(`Set threshold for ${dataset} to ${value}`);
+                    });
                     
                     // Set up the datasets and params in the context
                     mapContext.loadGeoData(
@@ -456,6 +467,27 @@ export function VercelV0Chat() {
                     instructionData.data?.countries && 
                     instructionData.data?.years) {
                     
+                    // Set threshold values, ensuring minimum of 1 for each dataset
+                    const thresholds = instructionData.data.thresholds && typeof instructionData.data.thresholds === 'object' 
+                        ? {...instructionData.data.thresholds} 
+                        : {};
+                        
+                    // Ensure all datasets have at least threshold of 1
+                    const allDatasets = instructionData.data.datasets as DatasetType[];
+                    allDatasets.forEach(dataset => {
+                        // If threshold is not specified or less than 1, set it to 1
+                        const currentValue = thresholds[dataset];
+                        if (typeof currentValue !== 'number' || currentValue < 1) {
+                            thresholds[dataset] = 1;
+                        }
+                    });
+                    
+                    // Apply all thresholds
+                    Object.entries(thresholds).forEach(([dataset, value]) => {
+                        mapContext.handleThresholdChange(dataset, value as number);
+                        console.log(`Set threshold for ${dataset} to ${value}`);
+                    });
+                    
                     // Set up the data in the map context
                     mapContext.loadGeoData(
                         instructionData.data.datasets as DatasetType[],
@@ -486,8 +518,15 @@ export function VercelV0Chat() {
                     instructionData.data?.dataset && 
                     instructionData.data?.value !== undefined) {
                     
-                    // First set the threshold
-                    mapContext.handleThresholdChange(instructionData.data.dataset, instructionData.data.value);
+                    // Get the threshold value, ensuring it's at least 1
+                    let thresholdValue = instructionData.data.value;
+                    if (thresholdValue < 1) {
+                        thresholdValue = 1;
+                        console.log(`Adjusted threshold value to minimum of 1`);
+                    }
+                    
+                    // Set the threshold
+                    mapContext.handleThresholdChange(instructionData.data.dataset, thresholdValue);
                     
                     // Find and click the Apply Filters button
                     setTimeout(() => {

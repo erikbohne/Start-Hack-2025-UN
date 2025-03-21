@@ -90,8 +90,8 @@ export const MapProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [thresholdValues, setThresholdValues] = useState<{
     [dataset: string]: number;
   }>({
-    PopDensity: 0,
-    Precipitation: 0,
+    PopDensity: 1,
+    Precipitation: 1,
   });
 
   // Range information for datasets
