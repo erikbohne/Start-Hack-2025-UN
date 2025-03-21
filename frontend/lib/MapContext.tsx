@@ -99,8 +99,8 @@ export const MapProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const datasetRanges = useRef<{
     [dataset: string]: { min: number; max: number };
   }>({
-    PopDensity: { min: 0, max: 100 },
-    Precipitation: { min: 0, max: 1000 },
+    PopDensity: { min: 0, max: 0 },
+    Precipitation: { min: 0, max: 0 },
   });
 
   // These functions will be overridden by the Map component when it connects to context

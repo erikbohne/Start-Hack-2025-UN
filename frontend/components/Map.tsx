@@ -252,6 +252,9 @@ export default function Map() {
         const hideOps: (() => void)[] = [];
         const showOps: (() => void)[] = [];
         const filterOps: (() => void)[] = [];
+        
+        // Track datasets that will be visible after this update
+        const visibleDatasets = new Set<string>();
 
         // Process all active layers
         activeLayers.current.forEach((layerId) => {
@@ -259,6 +262,9 @@ export default function Map() {
           const parts = layerId.split("-");
           const layerYear =
             parts.length > 2 ? parseInt(parts[parts.length - 1]) : -1;
+          
+          // Get the dataset name from the layer ID
+          const dataset = parts[0];
 
           if (!map.current?.getLayer(layerId)) return;
 
@@ -286,7 +292,7 @@ export default function Map() {
               showOps.push(() =>
                 map.current?.setLayoutProperty(layerId, "visibility", "visible")
               );
-              const dataset = layerId.split("-")[0];
+              
               filterOps.push(() =>
                 map.current?.setFilter(layerId, [
                   ">=",
@@ -294,6 +300,12 @@ export default function Map() {
                   thresholdValues[dataset],
                 ])
               );
+              
+              // Add dataset to visible ones
+              visibleDatasets.add(dataset);
+            } else if (visibility !== "none" && shouldBeVisible) {
+              // Layer is already visible and should remain visible
+              visibleDatasets.add(dataset);
             }
           } else {
             const visibility = map.current.getLayoutProperty(
@@ -311,9 +323,63 @@ export default function Map() {
         hideOps.forEach((op) => op());
         showOps.forEach((op) => op());
         filterOps.forEach((op) => op());
+        
+        // Update datasetRanges for visible layers in this specific year
+        visibleDatasets.forEach(dataset => {
+          // Find the max value for this dataset in the current year
+          let yearMax = 0;
+          let yearMin = Infinity;
+          let foundValidValues = false;
+          
+          activeLayers.current.forEach(layerId => {
+            const parts = layerId.split("-");
+            const layerDataset = parts[0];
+            const layerYear = parts.length > 2 ? parseInt(parts[parts.length - 1]) : -1;
+            
+            if (layerDataset === dataset && layerYear === yearToShow) {
+              // Get the source for this layer
+              const source = map.current?.getSource(layerId) as mapboxgl.GeoJSONSource;
+              if (!source) return;
+              
+              try {
+                // Access the GeoJSON data
+                const data = (source as any)._data;
+                if (!data || !data.features) return;
+                
+                // Extract and process DN values
+                const validDNValues = data.features
+                  .map((f: any) => {
+                    let rawDN = f.properties?.DN;
+                    if (typeof rawDN === "string") {
+                      rawDN = rawDN.replace(/\s+/g, "");
+                    }
+                    return parseFloat(rawDN);
+                  })
+                  .filter((dn: number) => !isNaN(dn) && dn > 0);
+                
+                if (validDNValues.length > 0) {
+                  yearMin = Math.min(yearMin, Math.min(...validDNValues));
+                  yearMax = Math.max(yearMax, Math.max(...validDNValues));
+                  foundValidValues = true;
+                }
+              } catch (err) {
+                console.error("Error accessing source data:", err);
+              }
+            }
+          });
+          
+          // Update the dataset ranges with year-specific maximum if found
+          if (foundValidValues) {
+            console.log(`Updated range for ${dataset} in year ${yearToShow}: min=${yearMin}, max=${yearMax}`);
+            datasetRanges.current[dataset] = {
+              min: datasetRanges.current[dataset].min, // Keep the overall min
+              max: yearMax // Use the year-specific max
+            };
+          }
+        });
       });
     },
-    [thresholdValues, contextUpdateVisibleYear]
+    [thresholdValues, contextUpdateVisibleYear, map, mapIsReady, activeLayers]
   );
 
   // Optimized animation step function using requestAnimationFrame
@@ -722,6 +788,8 @@ export default function Map() {
                       );
                     }
 
+                    // Attempt to extract and convert DN values
+                    // Extract and clean the DN values from the GeoJSON features
                     const validDNValues = geojson.features
                       .map((f) => {
                         let rawDN = f.properties?.DN;
@@ -1245,12 +1313,14 @@ export default function Map() {
                 {datasetRanges.current.PopDensity && (
                   <div className="text-xs text-gray-600">
                     (min:{" "}
-                    {datasetRanges.current.PopDensity.min.toLocaleString(
-                      undefined,
-                      {
-                        maximumFractionDigits: 0,
-                      }
-                    )}
+                    {thresholdValues.PopDensity > 0 
+                      ? thresholdValues.PopDensity.toLocaleString()
+                      : datasetRanges.current.PopDensity.min.toLocaleString(
+                        undefined,
+                        {
+                          maximumFractionDigits: 0,
+                        }
+                      )}
                     , max:{" "}
                     {datasetRanges.current.PopDensity.max.toLocaleString(
                       undefined,
@@ -1267,12 +1337,14 @@ export default function Map() {
               </div>
               <div className="flex justify-between w-full text-xs mt-1 text-gray-600">
                 <span>
-                  {datasetRanges.current.PopDensity?.min.toLocaleString(
-                    undefined,
-                    {
-                      maximumFractionDigits: 1,
-                    }
-                  )}{" "}
+                  {thresholdValues.PopDensity > 0 
+                    ? thresholdValues.PopDensity.toLocaleString()
+                    : datasetRanges.current.PopDensity?.min.toLocaleString(
+                      undefined,
+                      {
+                        maximumFractionDigits: 1,
+                      }
+                    )}{" "}
                   people/km²
                 </span>
                 <span>
@@ -1313,12 +1385,14 @@ export default function Map() {
               </div>
               <div className="flex justify-between w-full text-xs mt-1 text-gray-600">
                 <span>
-                  {datasetRanges.current.Precipitation?.min.toLocaleString(
-                    undefined,
-                    {
-                      maximumFractionDigits: 1,
-                    }
-                  )}
+                  {thresholdValues.Precipitation > 0 
+                    ? thresholdValues.Precipitation.toLocaleString() 
+                    : datasetRanges.current.Precipitation?.min.toLocaleString(
+                      undefined,
+                      {
+                        maximumFractionDigits: 1,
+                      }
+                    )}
                 </span>
                 <span>
                   {datasetRanges.current.Precipitation?.max.toLocaleString(
