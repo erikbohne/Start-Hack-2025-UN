@@ -1,7 +1,7 @@
 import os
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Query
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from graphs.GeoChatAgent.agent import stream_geo_chat
 from fastapi.middleware.cors import CORSMiddleware
@@ -295,6 +295,88 @@ async def stream_chat(request: ChatRequest):
     return StreamingResponse(
         stream_geo_chat(request.messages, request.mapState), media_type="text/plain"
     )
+
+@app.get("/timeline-gif")
+async def get_timeline_gif(
+    country: str = "Mali", 
+    dataset: str = "PopDensity", 
+    start: int = 2015, 
+    end: int = 2020
+):
+    """
+    Endpoint that serves the timeline GIF with parameters.
+    If a GIF with these parameters doesn't exist, it will fall back to the default timeline.gif.
+    """
+    # Check if the parameters are valid (sanitize them to prevent injections)
+    valid_countries = ["Mali", "Chad", "Niger", "Burkina_Faso", "Mauritania", "Senegal", "Sudan"]
+    valid_datasets = ["PopDensity", "Precipitation"]
+    
+    if country not in valid_countries:
+        country = "Mali"
+    if dataset not in valid_datasets:
+        dataset = "PopDensity"
+    
+    # Ensure years are in the valid range
+    start = max(2010, min(2020, start))
+    end = max(2010, min(2020, end))
+    
+    # Determine the filename
+    # First try a specific filename based on parameters
+    param_filename = f"{dataset}_{country}_{start}_{end}.gif"
+    param_path = os.path.join(os.getcwd(), param_filename)
+    
+    # Default fallback path
+    default_path = os.path.join(os.getcwd(), "timeline.gif")
+    
+    print(f"Looking for GIF at: {param_path} or {default_path}")
+    
+    try:
+        # First check if the parameterized file exists
+        if os.path.exists(param_path):
+            print(f"Parameterized GIF found, size: {os.path.getsize(param_path)} bytes")
+            headers = {
+                "Content-Disposition": f"inline; filename={param_filename}",
+                "Access-Control-Allow-Origin": "*",
+                "Cache-Control": "no-cache, no-store, must-revalidate"
+            }
+            return FileResponse(param_path, media_type="image/gif", headers=headers)
+        
+        # Fall back to the default timeline.gif
+        elif os.path.exists(default_path):
+            print(f"Default GIF found, size: {os.path.getsize(default_path)} bytes")
+            headers = {
+                "Content-Disposition": "inline; filename=timeline.gif",
+                "Access-Control-Allow-Origin": "*",
+                "Cache-Control": "no-cache, no-store, must-revalidate"
+            }
+            return FileResponse(default_path, media_type="image/gif", headers=headers)
+        else:
+            print(f"GIF files not found")
+            raise HTTPException(status_code=404, detail="Timeline GIF not found")
+    except Exception as e:
+        print(f"Error serving GIF: {e}")
+        raise HTTPException(status_code=500, detail=f"Error serving GIF: {str(e)}")
+
+@app.get("/timeline-view")
+async def get_timeline_html(title: str = None):
+    """
+    Endpoint that serves an HTML page displaying the timeline GIF.
+    """
+    html_path = os.path.join(os.getcwd(), "timeline_display.html")
+    print(f"Looking for HTML at: {html_path}")
+    
+    try:
+        if os.path.exists(html_path):
+            headers = {
+                "Access-Control-Allow-Origin": "*"  # Add CORS header explicitly
+            }
+            return FileResponse(html_path, media_type="text/html", headers=headers)
+        else:
+            print(f"HTML file not found at: {html_path}")
+            raise HTTPException(status_code=404, detail=f"Timeline HTML not found at {html_path}")
+    except Exception as e:
+        print(f"Error serving HTML: {e}")
+        raise HTTPException(status_code=500, detail=f"Error serving HTML: {str(e)}")
 
 
 if __name__ == "__main__":

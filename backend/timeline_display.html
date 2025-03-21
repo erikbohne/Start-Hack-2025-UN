@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Timeline Animation</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background-color: white;
+            font-family: Arial, sans-serif;
+        }
+        .gif-container {
+            max-width: 100%;
+            width: 100%;
+            text-align: center;
+            padding: 10px;
+        }
+        .gif-container img {
+            max-width: 100%;
+            height: auto;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        .title {
+            font-family: Arial, sans-serif;
+            font-size: 16px;
+            font-weight: bold;
+            margin-bottom: 10px;
+            color: #333;
+        }
+        .subtitle {
+            font-size: 14px;
+            color: #666;
+            margin-bottom: 15px;
+        }
+        .loading {
+            padding: 20px;
+            color: #666;
+            font-style: italic;
+        }
+        .error {
+            padding: 20px;
+            color: #e53e3e;
+            background-color: #fed7d7;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+        .reload-btn {
+            padding: 8px 16px;
+            background-color: #4299e1;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-top: 10px;
+        }
+        .reload-btn:hover {
+            background-color: #3182ce;
+        }
+        .years-info {
+            font-size: 12px;
+            color: #666;
+            margin-top: 8px;
+        }
+    </style>
+</head>
+<body>
+    <div class="gif-container">
+        <div class="title" id="title">Timeline Animation</div>
+        <div class="subtitle" id="subtitle"></div>
+        <div id="loading" class="loading">Loading timeline animation...</div>
+        <div id="error" class="error" style="display: none;">
+            Failed to load the timeline. 
+            <button class="reload-btn" onclick="loadGif()">Try Again</button>
+        </div>
+        <img 
+            id="timeline-gif" 
+            src="" 
+            alt="Timeline Animation" 
+            style="display: none;"
+            onload="document.getElementById('loading').style.display = 'none'; this.style.display = 'block';"
+            onerror="handleImageError()"
+        >
+        <div class="years-info" id="years-info"></div>
+    </div>
+    
+    <script>
+        // Extract parameters from URL
+        function getParam(name) {
+            const urlParams = new URLSearchParams(window.location.search);
+            return urlParams.get(name);
+        }
+        
+        function handleImageError() {
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('error').style.display = 'block';
+            document.getElementById('timeline-gif').style.display = 'none';
+        }
+        
+        function loadGif() {
+            // Get parameters
+            const country = getParam('country') || 'Mali';
+            const dataset = getParam('dataset') || 'PopDensity';
+            const startYear = getParam('start') || 2015;
+            const endYear = getParam('end') || 2020;
+            const title = getParam('title') || `${dataset} in ${country}`;
+            
+            // Set title and subtitle
+            document.getElementById('title').textContent = title;
+            document.getElementById('subtitle').textContent = 
+                `Showing ${dataset === 'PopDensity' ? 'population density' : 'precipitation'} data for ${country.replace('_', ' ')}`;
+            
+            // Set years info
+            document.getElementById('years-info').textContent = 
+                `Years: ${startYear} to ${endYear}`;
+            
+            // Reset loading and error states
+            document.getElementById('loading').style.display = 'block';
+            document.getElementById('error').style.display = 'none';
+            document.getElementById('timeline-gif').style.display = 'none';
+            
+            // Add timestamp to avoid caching
+            const timestamp = new Date().getTime();
+            const params = `country=${country}&dataset=${dataset}&start=${startYear}&end=${endYear}&t=${timestamp}`;
+            
+            // Set the image source with parameters
+            const img = document.getElementById('timeline-gif');
+            img.src = `/timeline-gif?${params}`;
+            img.alt = `${dataset} animation for ${country.replace('_', ' ')} (${startYear}-${endYear})`;
+            
+            // Update page title
+            document.title = `${dataset === 'PopDensity' ? 'Population Density' : 'Precipitation'} Timeline for ${country.replace('_', ' ')}`;
+        }
+        
+        // Load the GIF when the page loads
+        document.addEventListener('DOMContentLoaded', loadGif);
+    </script>
+</body>
+</html>

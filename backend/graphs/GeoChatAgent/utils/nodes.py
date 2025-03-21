@@ -1,14 +1,12 @@
 from graphs.GeoChatAgent.utils.state import GraphState
 from graphs.GeoChatAgent.utils.models import (
-    AvailableSteps,
-    RouteUserMessage,
-    MapBoxActionList,
-    MapBoxActions,
-    MapBoxInstruction,
+    AvailableSteps, RouteUserMessage, MapBoxActionList, 
+    MapBoxActions, MapBoxInstruction, MediaContent, ChatMessageWithMedia
 )
-from langchain_core.messages import SystemMessage, AIMessage
+from langchain_core.messages import SystemMessage, AIMessage, HumanMessage
+from langchain_groq import ChatGroq
 from langchain_openai import AzureChatOpenAI
-from typing import Literal
+from typing import Literal, List, Union
 from dotenv import load_dotenv
 import os
 import json
@@ -36,11 +34,9 @@ llm = AzureChatOpenAI(
 )
 
 
-def route_user_message(
-    state: GraphState,
-) -> Literal["chat_agent", "create_instructions", "analyze_data"]:
-    """Routes to the chat_agent node, instructions node, or data analysis node."""
-    system_content = """Determine whether the user's message requires map interaction or data analysis.
+def route_user_message(state: GraphState) -> Literal["chat_agent", "create_instructions", "analyze_data", "create_gif_timeline"]:
+    """Routes to the chat_agent node, instructions node, data analysis node, or GIF creation node."""
+    system_content = """Determine whether the user's message requires map interaction, data analysis, or timeline animation.
         
         Examples that require map interaction:
         - "Show me Paris on the map" (centering the map)
@@ -63,6 +59,15 @@ def route_user_message(
         - "Give me insights about the data for Mauritania"
         - "Analyze the trends in the displayed data"
         
+        Examples that require timeline animation (CREATE_GIF_FOR_TIMELINE):
+        - "Create an animation of population density in Mali from 2015 to 2020"
+        - "Show me a timeline animation of precipitation in Niger"
+        - "Make a GIF showing how rainfall changed in Chad over time"
+        - "Animate the population changes in Burkina Faso over the years"
+        - "Create a visual timeline of population density in Senegal"
+        - "I want to see how precipitation evolved in Sudan through an animation"
+        - "Show me an animated timeline of population changes in Mauritania from 2010 to 2020"
+        
         Choose MAPBOX_INSTRUCTIONS if any map manipulation is needed. This includes:
         - Centering on locations
         - Zooming
@@ -77,6 +82,13 @@ def route_user_message(
         - Summaries of data patterns
         - Insights about the data
         - Mathematical calculations on the data
+        
+        Choose CREATE_GIF_FOR_TIMELINE if the user is asking for:
+        - Timeline animations or visualizations
+        - GIFs showing changes over time
+        - Time-lapse visualizations
+        - Animations of data changes
+        - Visualizing temporal patterns through animation
         
         Otherwise choose CHAT_AGENT.
         """
@@ -100,6 +112,8 @@ def route_user_message(
         return "create_instructions"
     elif next.route == AvailableSteps.DATA_ANALYSIS:
         return "analyze_data"
+    elif next.route == AvailableSteps.CREATE_GIF_FOR_TIMELINE:
+        return "create_gif_timeline"
 
 
 def analyze_data(state: GraphState):
@@ -403,16 +417,20 @@ def instructions(state: GraphState):
         # Extract any country mentions from the user message for center action
         user_message = state["messages"][-1].content if state["messages"] else ""
 
-        # Extract map context country information
+        # Extract map context country and region information
         active_countries = []
+        active_regions = []
         if state.get("map_context"):
             map_context = state["map_context"]
             for line in map_context.split("\n"):
                 if "Countries shown:" in line:
                     countries_text = line.split("Countries shown:")[1].strip()
                     active_countries = [c.strip() for c in countries_text.split(",")]
+                if "Regions shown:" in line:
+                    regions_text = line.split("Regions shown:")[1].strip()
+                    active_regions = [r.strip() for r in regions_text.split(",")]
 
-        # Country coordinates
+        # Country and region coordinates
         country_coords = {
             "Burkina_Faso": [-1.561593, 12.364637],
             "Burkina Faso": [-1.561593, 12.364637],
@@ -422,28 +440,34 @@ def instructions(state: GraphState):
             "Niger": [8.081666, 17.607789],
             "Senegal": [-14.452362, 14.497401],
             "Sudan": [30.217636, 12.862807],
+            # Regions
+            "Assaba_Hodh_El_Gharbi_Tagant": [-10.940835, 21.00789],
+            "Sahel_Est_Centre-Est": [-1.561593, 12.364637]
         }
 
-        # Try to identify the most relevant country
-        target_country = None
+        # Try to identify the most relevant country or region
+        target_location = None
 
-        # First, check if a specific country is mentioned in the user message
-        for country in country_coords.keys():
-            if country.lower().replace("_", " ") in user_message.lower():
-                target_country = country
+        # First, check if a specific country or region is mentioned in the user message
+        for location in country_coords.keys():
+            if location.lower().replace("_", " ") in user_message.lower():
+                target_location = location
                 break
 
-        # If no country in message, use the first active country
-        if not target_country and active_countries and len(active_countries) > 0:
-            target_country = active_countries[0]
+        # If no location in message, use the first active country or region
+        if not target_location:
+            if active_regions and len(active_regions) > 0:
+                target_location = active_regions[0]
+            elif active_countries and len(active_countries) > 0:
+                target_location = active_countries[0]
 
-        # Create a CENTER instruction if we have a target country
-        if target_country and target_country in country_coords:
+        # Create a CENTER instruction if we have a target location
+        if target_location and target_location in country_coords:
             center_instruct = MapBoxInstruction(
                 action=MapBoxActions.SET_CENTER,
                 data={
-                    "center": country_coords[target_country],
-                    "zoom": 4,  # Zoomed out enough to show country context
+                    "center": country_coords[target_location],
+                    "zoom": 4,  # Zoomed out enough to show country or region context
                 },
             )
             state["frontend_actions"].append(center_instruct)
@@ -516,6 +540,10 @@ def instructions(state: GraphState):
             - Niger: [8.081666, 17.607789]
             - Senegal: [-14.452362, 14.497401]
             - Sudan: [30.217636, 12.862807]
+            
+            # Regions:
+            - Assaba Hodh El Gharbi Tagant: [-10.940835, 21.00789] # Same as Mauritania for now
+            - Sahel Est Centre-Est: [-1.561593, 12.364637] # Same as Burkina Faso for now
             
             Example output:
             {
@@ -633,6 +661,10 @@ def instructions(state: GraphState):
             - "Senegal"
             - "Sudan"
             
+            Available regions:
+            - "Assaba_Hodh_El_Gharbi_Tagant" (in Mauritania)
+            - "Sahel_Est_Centre-Est" (in Burkina Faso)
+            
             Available years: 2010 through 2020
             
             Example for loading population density data for Mali in 2015:
@@ -641,6 +673,7 @@ def instructions(state: GraphState):
               "data": {
                 "datasets": ["PopDensity"],
                 "countries": ["Mali"],
+                "regions": [],
                 "years": [2015],
                 "thresholds": {
                   "PopDensity": 20,
@@ -649,9 +682,11 @@ def instructions(state: GraphState):
               }
             }
             
-            Based on the user's request, determine which datasets, countries, and years should be displayed.
+            Based on the user's request, determine which datasets, countries, regions, and years should be displayed.
             If the user is asking about a specific type of data (population, rainfall, etc.), select the appropriate dataset.
             If the user is asking about specific countries, include those countries.
+            If the user is asking about specific regions, include those regions.
+            Note: Either include countries OR regions, not both at the same time.
             If the user mentions years, include those years. Otherwise default to 2015.
             
             You can set threshold values to filter the data. For example, if the user asks to see areas with population 
@@ -670,6 +705,354 @@ def instructions(state: GraphState):
         state["frontend_actions"].append(instruct)
 
     return state
+
+
+def create_gif_timeline(state: GraphState):
+    """Creates an animated timeline GIF from time series data and returns it to the frontend."""
+    import numpy as np
+    # Force matplotlib to use the Agg backend (non-interactive, no GUI)
+    import matplotlib
+    matplotlib.use('Agg')
+    import matplotlib.pyplot as plt
+    import matplotlib.colors as colors
+    from matplotlib.animation import FuncAnimation
+    import imageio
+    import os
+    import tempfile
+    import base64
+    from pathlib import Path
+    import rasterio
+    from PIL import Image
+    from graphs.GeoChatAgent.utils.models import TimelineParameters
+    
+    # Get the user's original message
+    user_message = state["messages"][-1].content if state["messages"] else ""
+    
+    # Add context about the available data
+    system_content = """Extract timeline parameters from the user's query.
+    
+    Available datasets:
+    - PopDensity (population density)
+    - Precipitation (rainfall)
+    
+    Available countries:
+    - Mali
+    - Chad
+    - Niger
+    - Burkina_Faso
+    - Mauritania
+    - Senegal
+    - Sudan
+    
+    Available years: 2010 through 2020
+    
+    If the user doesn't specify a particular parameter, use the default value.
+    If multiple countries or datasets are mentioned, select the first one mentioned.
+    If the user mentions years, extract them for start_year and end_year.
+    If only one year is mentioned, use it for both start and end year.
+    
+    For country names, convert spaces to underscores (e.g., "Burkina Faso" becomes "Burkina_Faso").
+    """
+    
+    # Add map context if available
+    if state.get("map_context"):
+        system_content += f"\n\nMap context:\n{state['map_context']}"
+    
+    # Create a system message
+    system_message = SystemMessage(content=system_content)
+    
+    # Use structured output to extract parameters
+    timeline_params = llm.with_structured_output(TimelineParameters, method="function_calling").invoke(
+        [system_message, HumanMessage(content=user_message)]
+    )
+    
+    print(f"Extracted timeline parameters: {timeline_params}")
+    
+    # Extract parameters from the structured output
+    dataset = timeline_params.dataset
+    country = timeline_params.country
+    start_year = timeline_params.start_year
+    end_year = timeline_params.end_year
+    
+    # Ensure years are within the available range
+    start_year = max(2010, start_year)
+    end_year = min(2020, end_year)
+    
+    # Create a sequence of years for the animation
+    years = list(range(start_year, end_year + 1))
+    
+    # Set up the response message
+    response_message = f"Creating an animated timeline of {dataset.replace('PopDensity', 'population density').replace('Precipitation', 'precipitation')} "
+    response_message += f"for {country.replace('_', ' ')} from {start_year} to {end_year}. "
+    response_message += "The animation will show changes over time in the selected dataset."
+    
+    # Get paths to the TIFF files
+    dataset_path = "/Users/eriknymobohne/Documents/hackathon/Start-Hack-2025-UN/data"
+    tiff_paths = []
+    
+    for year in years:
+        if dataset == "PopDensity":
+            country_codes = {
+                "Burkina_Faso": "bfa",
+                "Chad": "tcd",
+                "Mali": "mli",
+                "Mauritania": "mrt",
+                "Niger": "ner",
+                "Senegal": "sen",
+                "Sudan": "sdn"
+            }
+            
+            code = country_codes.get(country)
+            if not code:
+                continue
+                
+            tiff_filename = f"{code}_pd_{year}_1km_UNadj.tif"
+            tiff_path = f"{dataset_path}/Africa/PopDensity/{country}/{tiff_filename}"
+            
+        elif dataset == "Precipitation":
+            tiff_filename = f"Precipitation_{country.replace('_', ' ')}_{year}.tif"
+            tiff_path = f"{dataset_path}/Africa/Precipitation/{country}/{tiff_filename}"
+        
+        if os.path.exists(tiff_path):
+            tiff_paths.append((year, tiff_path))
+    
+    # If no valid tiff files found, return an error message
+    if not tiff_paths:
+        error_message = f"Sorry, I couldn't find any {dataset} TIFF files for {country.replace('_', ' ')} between {start_year} and {end_year}."
+        state["messages"].append(AIMessage(content=error_message))
+        return {"messages": state["messages"]}
+    
+    # Add necessary import for BytesIO
+    import io
+    
+    # Create a temporary directory for the GIF frames
+    with tempfile.TemporaryDirectory() as temp_dir:
+        # Prepare to collect PIL Image frames
+        pil_frames = []
+        
+        # Store min/max values for consistent colorscale
+        min_val = float('inf')
+        max_val = float('-inf')
+        
+        # First pass: read the data and determine global min/max for normalization
+        data_series = []
+        for year, tiff_path in tiff_paths:
+            try:
+                # Open the TIFF file with rasterio
+                with rasterio.open(tiff_path) as src:
+                    # Read the data
+                    data = src.read(1)
+                    
+                    # Handle nodata values
+                    if src.nodata is not None:
+                        data = np.ma.masked_equal(data, src.nodata)
+                    
+                    # Update global min/max (for consistent colormaps)
+                    valid_data = data[~np.isnan(data) & (data > 0)]
+                    if len(valid_data) > 0:
+                        min_val = min(min_val, valid_data.min())
+                        max_val = max(max_val, valid_data.max())
+                    
+                    # Store data for later processing
+                    data_series.append({
+                        "year": year,
+                        "data": data,
+                        "nodata": src.nodata
+                    })
+            except Exception as e:
+                print(f"Error reading {tiff_path}: {e}")
+                continue
+        
+        # Check if we have any valid data
+        if not data_series:
+            error_message = "Sorry, I couldn't process any TIFF files from the available data."
+            state["messages"].append(AIMessage(content=error_message))
+            return {"messages": state["messages"]}
+        
+        # Ensure we have sensible min/max values
+        if min_val == float('inf'):
+            min_val = 0
+        if max_val == float('-inf'):
+            max_val = 100
+        
+        # For population density, use log scale with minimum of 1
+        if dataset == 'PopDensity':
+            min_val = max(1, min_val)
+            norm = colors.LogNorm(vmin=min_val, vmax=max(100, max_val))
+            cmap = 'viridis'
+        else:
+            norm = colors.Normalize(vmin=min_val, vmax=max(100, max_val))
+            cmap = 'Blues'
+        
+        # Second pass: create frames with consistent colorscale
+        for data_item in sorted(data_series, key=lambda x: x["year"]):
+            year = data_item["year"]
+            data = data_item["data"]
+            
+            # Create a figure with high DPI for better quality
+            plt.figure(figsize=(10, 8), dpi=100)
+            
+            # Plot with consistent normalization
+            im = plt.imshow(data, cmap=cmap, norm=norm)
+            
+            # Add colorbar and title
+            cbar = plt.colorbar(im)
+            dataset_label = "Population Density" if dataset == "PopDensity" else "Precipitation (mm)"
+            cbar.set_label(f"{dataset_label}")
+            
+            # Add title with year
+            plt.title(f"{dataset_label} in {country.replace('_', ' ')} - {year}", fontsize=14)
+            
+            # Remove axes ticks for cleaner look
+            plt.xticks([])
+            plt.yticks([])
+            
+            # Add border for clarity
+            plt.gca().spines['top'].set_visible(True)
+            plt.gca().spines['right'].set_visible(True)
+            plt.gca().spines['bottom'].set_visible(True)
+            plt.gca().spines['left'].set_visible(True)
+            
+            # Save to in-memory buffer
+            buffer = io.BytesIO()
+            plt.savefig(buffer, format='png', bbox_inches='tight')
+            plt.close()
+            
+            # Convert to PIL Image
+            buffer.seek(0)
+            img = Image.open(buffer)
+            pil_frames.append(img)
+            
+            # Also save to disk for debugging if needed
+            frame_path = os.path.join(temp_dir, f"frame_{year}.png")
+            img.save(frame_path)
+        
+        if not pil_frames:
+            error_message = "Sorry, I couldn't create animation frames from the available data."
+            state["messages"].append(AIMessage(content=error_message))
+            return {"messages": state["messages"]}
+        
+        # Create the GIF file using PIL
+        gif_path = os.path.join(temp_dir, f"{dataset}_{country}_{start_year}_{end_year}.gif")
+        
+        # Save as GIF with appropriate duration (500ms per frame)
+        pil_frames[0].save(
+            gif_path,
+            save_all=True,
+            append_images=pil_frames[1:],
+            optimize=False,
+            duration=500,  # milliseconds per frame
+            loop=0  # 0 means loop forever
+        )
+
+        # Save to current working directory with absolute path
+        import os
+        gif_output_path = os.path.join(os.getcwd(), "timeline.gif")
+        print(f"Saving GIF to: {gif_output_path}")
+        
+        pil_frames[0].save(
+            gif_output_path,
+            save_all=True,
+            append_images=pil_frames[1:],
+            optimize=False,
+            duration=500,  # milliseconds per frame
+            loop=0  # 0 means loop forever
+        )
+        
+        # Verify file was saved
+        if os.path.exists(gif_output_path):
+            print(f"GIF successfully saved, size: {os.path.getsize(gif_output_path)} bytes")
+        else:
+            print(f"ERROR: GIF file was not saved to {gif_output_path}")
+
+        # Convert GIF to base64 for frontend
+        with open(gif_path, "rb") as gif_file:
+            gif_data = base64.b64encode(gif_file.read()).decode("utf-8")
+        
+        # Create a title for the timeline animation
+        title = f"{dataset.replace('PopDensity', 'Population Density').replace('Precipitation', 'Precipitation')} Timeline for {country.replace('_', ' ')}"
+        
+        # Create a media content object
+        media_content = MediaContent(
+            type="gif",
+            data=gif_data,
+            alt_text=f"Animated timeline showing {dataset.replace('PopDensity', 'population density').replace('Precipitation', 'precipitation')} changes in {country.replace('_', ' ')} from {start_year} to {end_year}",
+            title=title,
+            metadata={
+                "dataset": dataset,
+                "country": country,
+                "years": [data_item["year"] for data_item in sorted(data_series, key=lambda x: x["year"])],
+                "start_year": start_year,
+                "end_year": end_year
+            }
+        )
+        
+        # Create a chat message with embedded media
+        chat_with_media = ChatMessageWithMedia(
+            text=response_message,
+            media=media_content
+        )
+        
+        # Generate a unique timestamp for this GIF to avoid browser caching
+        import time
+        import urllib.parse
+        timestamp = int(time.time() * 1000)
+        gif_url = f"http://localhost:8000/timeline-gif?t={timestamp}"
+        
+        # Also create a URL for the HTML page with the title included
+        encoded_title = urllib.parse.quote(title)
+        html_url = f"http://localhost:8000/timeline-view?title={encoded_title}&t={timestamp}"
+        
+        print(f"GIF URL with cache buster: {gif_url}")
+        print(f"HTML URL with title: {html_url}")
+        
+        # Create a MapBox instruction with a URL instead of embedding base64 data
+        media_instruction = MapBoxInstruction(
+            action=MapBoxActions.CHAT_MESSAGE_WITH_MEDIA,
+            data={
+                "text": response_message,
+                "media": {
+                    "type": "gif",
+                    "url": gif_url,  # Direct GIF URL with cache buster
+                    "iframe_url": html_url, # HTML page URL that displays the GIF
+                    "alt_text": f"Animated timeline showing {dataset.replace('PopDensity', 'population density').replace('Precipitation', 'precipitation')} changes in {country.replace('_', ' ')} from {start_year} to {end_year}",
+                    "title": title,
+                    "metadata": {
+                        "dataset": dataset,
+                        "country": country,
+                        "years": [data_item["year"] for data_item in sorted(data_series, key=lambda x: x["year"])],
+                        "start_year": start_year,
+                        "end_year": end_year
+                    }
+                }
+            }
+        )
+        
+        # Also include the original timeline display instruction for compatibility
+        timeline_instruct = MapBoxInstruction(
+            action=MapBoxActions.DISPLAY_TIMELINE,
+            data={
+                "timeline_gif_url": gif_url,  # Direct GIF URL with cache buster
+                "timeline_iframe_url": html_url, # HTML page URL that displays the GIF
+                "dataset": dataset,
+                "country": country,
+                "years": [data_item["year"] for data_item in sorted(data_series, key=lambda x: x["year"])],
+                "title": title
+            }
+        )
+        
+        # Add the instructions to frontend actions
+        if "frontend_actions" not in state:
+            state["frontend_actions"] = []
+        
+        # Add both instructions to support both display methods
+        state["frontend_actions"].append(media_instruction)
+        state["frontend_actions"].append(timeline_instruct)
+        
+        # Add the response message as a normal AI message
+        state["messages"].append(AIMessage(content=response_message))
+        
+        return {"messages": state["messages"], "frontend_actions": state["frontend_actions"]}
 
 
 def is_more_instructions(state: GraphState) -> Literal["chat_agent", "instructions"]:

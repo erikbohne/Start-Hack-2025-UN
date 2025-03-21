@@ -1432,8 +1432,13 @@ export default function Map() {
             activeCountries={
               datasetCountryCombo.current
                 .map((item) => item.country)
-                .filter((v, i, a) => a.indexOf(v) === i) as CountryType[]
+                .filter((v, i, a) => v && a.indexOf(v) === i) as CountryType[]
             }
+            activeRegions={
+              datasetCountryCombo.current
+                .map((item) => item.region)
+                .filter((v, i, a) => v && a.indexOf(v) === i) as RegionType[]
+            }  
             activeYears={yearSequence.current}
           />
         </div>

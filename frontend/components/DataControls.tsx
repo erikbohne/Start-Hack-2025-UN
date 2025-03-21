@@ -25,6 +25,7 @@ interface DataControlsProps {
 interface ExtendedDataControlsProps extends DataControlsProps {
   activeDatasets?: DatasetType[];
   activeCountries?: CountryType[];
+  activeRegions?: RegionType[];
   activeYears?: number[];
 }
 
@@ -45,6 +46,7 @@ export default function DataControls({
   onThresholdChange,
   activeDatasets,
   activeCountries,
+  activeRegions,
   activeYears
 }: ExtendedDataControlsProps) {
   const [selectedDatasets, setSelectedDatasets] = useState<DatasetType[]>(['PopDensity']);
@@ -85,8 +87,27 @@ export default function DataControls({
   useEffect(() => {
     if (activeCountries && activeCountries.length > 0) {
       setSelectedCountries(activeCountries);
+      
+      // If countries are selected, ensure we're in countries mode
+      if (viewMode !== 'countries') {
+        setViewMode('countries');
+        setSelectedRegions([]);
+      }
     }
-  }, [activeCountries]);
+  }, [activeCountries, viewMode]);
+  
+  // Handle external region selections
+  useEffect(() => {
+    if (activeRegions && activeRegions.length > 0) {
+      setSelectedRegions(activeRegions);
+      
+      // If regions are selected, ensure we're in regions mode
+      if (viewMode !== 'regions') {
+        setViewMode('regions');
+        setSelectedCountries([]);
+      }
+    }
+  }, [activeRegions, viewMode]);
   
   useEffect(() => {
     if (activeYears && activeYears.length > 0) {

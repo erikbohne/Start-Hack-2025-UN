@@ -7,6 +7,8 @@ class MapBoxActions(Enum):
     SET_CENTER = "SET_CENTER"
     SET_ZOOM = "SET_ZOOM"
     ANALYZE_DATA = "ANALYZE_DATA"
+    DISPLAY_TIMELINE = "DISPLAY_TIMELINE"
+    CHAT_MESSAGE_WITH_MEDIA = "CHAT_MESSAGE_WITH_MEDIA"
     NONE = "NONE"
 
 
@@ -39,6 +41,42 @@ class AvailableSteps(Enum):
     DATA_ANALYSIS = "DATA_ANALYSIS"
     CREATE_GIF_FOR_TIMELINE = "CREATE_GIF_FOR_TIMELINE"
 
+
+class TimelineParameters(BaseModel):
+    dataset: str = Field(
+        description="Dataset to create timeline animation for (PopDensity or Precipitation)",
+        default="PopDensity"
+    )
+    country: str = Field(
+        description="Country or region to create timeline animation for (Mali, Chad, Niger, Burkina_Faso, Mauritania, Senegal, Sudan, Assaba_Hodh_El_Gharbi_Tagant, Sahel_Est_Centre-Est)",
+        default="Mali"
+    )
+    start_year: int = Field(
+        description="Start year for the timeline (between 2010 and 2020)",
+        default=2015
+    )
+    end_year: int = Field(
+        description="End year for the timeline (between 2010 and 2020)",
+        default=2020
+    )
+    frame_delay: int = Field(
+        default=500, 
+        description="Delay between frames in milliseconds"
+    )
+
+
+class MediaContent(BaseModel):
+    type: str = Field(description="Type of media (image, gif, video, etc.)")
+    data: str = Field(description="Base64-encoded media data")
+    alt_text: str = Field(description="Alternative text description of the media")
+    title: str = Field(default="", description="Optional title for the media")
+    metadata: dict = Field(default_factory=dict, description="Additional metadata about the media")
+
+
+class ChatMessageWithMedia(BaseModel):
+    text: str = Field(description="Text content of the message")
+    media: MediaContent = Field(description="Media content to include with the message")
+    
 
 class RouteUserMessage(BaseModel):
     route: AvailableSteps = Field(description="Route to the next step")

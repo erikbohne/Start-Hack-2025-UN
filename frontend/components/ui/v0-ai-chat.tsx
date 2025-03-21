@@ -15,7 +15,18 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
 // Define message types
-type MessageType = "human" | "ai" | "instruction";
+type MessageType = "human" | "ai" | "instruction" | "media";
+
+// Define media content interface
+interface MediaContent {
+    type: string;
+    data?: string;     // Base64 data (optional)
+    url?: string;      // URL for fetching media (optional)
+    iframe_url?: string; // URL for iframe display (optional)
+    alt_text: string;
+    title?: string;
+    metadata?: Record<string, unknown>;
+}
 
 // Define message interface
 interface Message {
@@ -28,6 +39,8 @@ interface Message {
         action: string;
         data: Record<string, unknown>;
     };
+    // For media messages
+    media?: MediaContent;
 }
 
 interface UseAutoResizeTextareaProps {
@@ -110,6 +123,36 @@ export function VercelV0Chat() {
             messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
         }
     }, [messages]);
+    
+    // Function to add a timeline link to the chat
+    const addTimelineLinkToChat = useCallback((
+        country: string = "Mali", 
+        dataset: string = "PopDensity", 
+        startYear: number = 2015, 
+        endYear: number = 2020
+    ) => {
+        // Create a unique timestamp for cache busting
+        const timestamp = new Date().getTime();
+        
+        // Create a properly parameterized URL for the timeline view
+        const titleParam = encodeURIComponent(`${dataset} in ${country} (${startYear}-${endYear})`);
+        const timelineUrl = `http://localhost:8000/timeline-view?title=${titleParam}&country=${country}&dataset=${dataset}&start=${startYear}&end=${endYear}&t=${timestamp}`;
+        
+        console.log(`Generated timeline URL: ${timelineUrl}`);
+        
+        // Create a message with the timeline link
+        const linkMsg: Message = {
+            id: generateMessageId(),
+            type: "ai",
+            content: `I've created a timeline of ${dataset === 'PopDensity' ? 'population density' : 'precipitation'} in ${country.replace('_', ' ')} from ${startYear} to ${endYear}.\n\n**[Click here to view the timeline animation](${timelineUrl})**\n\nThe animation will open in a new window showing the changes over time.`,
+            timestamp: new Date()
+        };
+        
+        // Add the message to the chat
+        setMessages(prev => [...prev, linkMsg]);
+        
+        console.log("Timeline link added to chat");
+    }, []);
 
     const handleSendMessage = async () => {
         if (!value.trim()) return;
@@ -123,6 +166,57 @@ export function VercelV0Chat() {
 
         // Add user message to chat
         setMessages((prev) => [...prev, userMessage]);
+        
+        // Check if the message contains keywords related to timeline or animation
+        const userInput = value.toLowerCase();
+        const timelineKeywords = ['timeline', 'animation', 'gif', 'animate', 'time series', 'changes over time'];
+        const containsTimelineRequest = timelineKeywords.some(keyword => userInput.includes(keyword));
+        
+        // If user is asking for a timeline, extract parameters and add the GIF directly
+        if (containsTimelineRequest) {
+            // Extract parameters from the user's request
+            let country = "Mali";  // Default
+            let dataset = "PopDensity";  // Default
+            let startYear = 2015;  // Default
+            let endYear = 2020;    // Default
+            
+            // Check for country
+            const countries = ["Mali", "Chad", "Niger", "Burkina_Faso", "Mauritania", "Senegal", "Sudan"];
+            for (const c of countries) {
+                if (userInput.includes(c.toLowerCase().replace("_", " "))) {
+                    country = c;
+                    break;
+                }
+            }
+            
+            // Check for dataset
+            if (userInput.includes("precipitation") || userInput.includes("rainfall")) {
+                dataset = "Precipitation";
+            } else if (userInput.includes("population") || userInput.includes("density")) {
+                dataset = "PopDensity";
+            }
+            
+            // Try to extract years
+            const yearPattern = /\b20[0-2][0-9]\b/g;
+            const yearMatches = userInput.match(yearPattern);
+            
+            if (yearMatches && yearMatches.length >= 2) {
+                // If we have at least 2 years, use the first and last as range
+                const years = yearMatches.map(y => parseInt(y)).sort();
+                startYear = years[0];
+                endYear = years[years.length - 1];
+            } else if (yearMatches && yearMatches.length === 1) {
+                // If only one year, center a 3-year range around it
+                const year = parseInt(yearMatches[0]);
+                startYear = Math.max(2010, year - 1);
+                endYear = Math.min(2020, year + 1);
+            }
+            
+            // Wait a moment to make it seem like the system is processing
+            setTimeout(() => {
+                addTimelineLinkToChat(country, dataset, startYear, endYear);
+            }, 1500);
+        }
         
         // Clear input and reset height
         setValue("");
@@ -153,7 +247,11 @@ export function VercelV0Chat() {
                 activeDatasets: mapContext.datasetCountryCombo.current,
                 thresholdValues: mapContext.thresholdValues,
                 datasetRanges: mapContext.datasetRanges.current,
-                animating: mapContext.animating
+                animating: mapContext.animating,
+                selectedRegions: mapContext.datasetCountryCombo.current
+                    .filter(combo => combo.region)
+                    .map(combo => combo.region)
+                    .filter((value, index, self) => value && self.indexOf(value) === index)
             };
 
             // Call the streaming API
@@ -228,20 +326,28 @@ export function VercelV0Chat() {
                                 // Log the raw instruction data for debugging
                                 console.log(`Processing instruction part ${i}:`, instructionPart);
                                 
+                                console.log("About to parse JSON instruction:", instructionPart);
+                                
                                 // Process the instruction JSON
                                 const instructionResult = processInstruction(instructionPart);
                                 
-                                // Add the instruction result as a separate system message
-                                const instructionMessage = {
-                                    id: generateMessageId(),
-                                    type: "instruction",
-                                    content: instructionResult,
-                                    timestamp: new Date(),
-                                    instructionData: { action: "processed", data: { instruction: instructionPart } }
-                                };
-                                
-                                console.log("Adding instruction message:", instructionMessage);
-                                setMessages(prev => [...prev, instructionMessage]);
+                                // If processInstruction returned an empty string, don't add an instruction message
+                                // This happens when processInstruction has already added a message (e.g. for media)
+                                if (instructionResult) {
+                                    // Add the instruction result as a separate system message
+                                    const instructionMessage = {
+                                        id: generateMessageId(),
+                                        type: "instruction",
+                                        content: instructionResult,
+                                        timestamp: new Date(),
+                                        instructionData: { action: "processed", data: { instruction: instructionPart } }
+                                    };
+                                    
+                                    console.log("Adding instruction message:", instructionMessage);
+                                    setMessages(prev => [...prev, instructionMessage]);
+                                } else {
+                                    console.log("No instruction message added (empty result)");
+                                }
                             } catch (error) {
                                 console.error(`Error processing instruction part ${i}:`, error, "Raw data:", instructionPart);
                             }
@@ -288,9 +394,18 @@ export function VercelV0Chat() {
     // Function to process instructions from AI
     const processInstruction = useCallback((instructionJson: string) => {
         try {
-            // Try to parse as JSON
-            const instructionData = JSON.parse(instructionJson);
-            console.log("Processing instruction:", instructionData);
+            // Check if we're dealing with unparsed JSON or a string
+            let instructionData;
+            console.log("Raw instruction to process:", instructionJson);
+            
+            try {
+                // Try to parse as JSON
+                instructionData = JSON.parse(instructionJson);
+                console.log("Successfully parsed instruction JSON:", instructionData);
+            } catch (parseError) {
+                console.error("Error parsing instruction JSON:", parseError);
+                return `Error parsing instruction: ${parseError.message}`;
+            }
             
             // Check for type property (could be from backend or our custom format)
             const action = instructionData.type === 'instruction' ? instructionData.action : instructionData.action;
@@ -332,22 +447,100 @@ export function VercelV0Chat() {
                 return "Analyzing the current map data...";
             }
             
+            if (instructionData.action === 'CHAT_MESSAGE_WITH_MEDIA' && instructionData.data) {
+                console.log("Processing CHAT_MESSAGE_WITH_MEDIA instruction:", instructionData.data);
+                
+                try {
+                    // Create a media message
+                    const mediaMsg: Message = {
+                        id: generateMessageId(),
+                        type: "media",
+                        content: instructionData.data.text || "",
+                        timestamp: new Date(),
+                        media: {
+                            type: instructionData.data.media.type,
+                            data: instructionData.data.media.data,   // May be undefined
+                            url: instructionData.data.media.url,     // May be undefined
+                            iframe_url: instructionData.data.media.iframe_url, // May be undefined
+                            alt_text: instructionData.data.media.alt_text,
+                            title: instructionData.data.media.title,
+                            metadata: instructionData.data.media.metadata
+                        }
+                    };
+                    
+                    // Directly add the media message to the messages state
+                    setMessages(prev => [...prev, mediaMsg]);
+                    
+                    // Return an empty string to prevent adding a duplicate instruction message
+                    return "";
+                } catch (error) {
+                    console.error("Error processing media message:", error);
+                    return "I tried to show you a media visualization but encountered an error.";
+                }
+            }
+            
+            if (instructionData.action === 'DISPLAY_TIMELINE' && instructionData.data) {
+                console.log("Processing DISPLAY_TIMELINE instruction", instructionData.data);
+                
+                try {
+                    // Create a media message for the timeline
+                    const mediaMsg: Message = {
+                        id: generateMessageId(),
+                        type: "media",
+                        content: `Here's the timeline animation for ${instructionData.data.country.replace('_', ' ')}`,
+                        timestamp: new Date(),
+                        media: {
+                            type: "gif",
+                            data: instructionData.data.timeline_gif, // Base64 data (if provided)
+                            url: instructionData.data.timeline_gif_url, // URL to fetch GIF
+                            iframe_url: instructionData.data.timeline_iframe_url, // URL for iframe display
+                            alt_text: `Timeline animation for ${instructionData.data.country.replace('_', ' ')}`,
+                            title: instructionData.data.title || `${instructionData.data.dataset} Timeline`,
+                            metadata: {
+                                dataset: instructionData.data.dataset,
+                                country: instructionData.data.country,
+                                years: instructionData.data.years
+                            }
+                        }
+                    };
+                    
+                    // Directly add the media message to the messages state
+                    setMessages(prev => [...prev, mediaMsg]);
+                    
+                    // Return an empty string to prevent adding a duplicate instruction message
+                    return "";
+                } catch (error) {
+                    console.error("Error processing timeline:", error);
+                    return "I tried to show you a timeline animation but encountered an error.";
+                }
+            }
+            
             if (instructionData.action === 'SET_GEOJSON' && instructionData.data) {
                 console.log("Processing SET_GEOJSON instruction:", instructionData.data);
                 
-                // Check if we have the datasets, countries, and years parameters
+                // Check if we have the datasets and years parameters, plus countries OR regions
                 if (
                     instructionData.data.datasets && 
-                    Array.isArray(instructionData.data.datasets) && 
-                    instructionData.data.countries && 
-                    Array.isArray(instructionData.data.countries) &&
+                    Array.isArray(instructionData.data.datasets) &&
                     instructionData.data.years && 
-                    Array.isArray(instructionData.data.years)
+                    Array.isArray(instructionData.data.years) &&
+                    (
+                        // Either countries OR regions should be present
+                        (instructionData.data.countries && Array.isArray(instructionData.data.countries)) ||
+                        (instructionData.data.regions && Array.isArray(instructionData.data.regions))
+                    )
                 ) {
+                    // Extract required data with defaults
+                    const datasets = instructionData.data.datasets;
+                    const countries = instructionData.data.countries || [];
+                    const regions = instructionData.data.regions || [];
+                    const years = instructionData.data.years;
+                    
                     console.log("Loading data with params:", {
-                        datasets: instructionData.data.datasets,
-                        countries: instructionData.data.countries,
-                        years: instructionData.data.years
+                        datasets,
+                        countries,
+                        regions,
+                        years
                     });
                     
                     // Set threshold values, ensuring minimum of 1 for each dataset
@@ -356,7 +549,7 @@ export function VercelV0Chat() {
                         : {};
                         
                     // Ensure all datasets have at least threshold of 1
-                    const allDatasets = instructionData.data.datasets as DatasetType[];
+                    const allDatasets = datasets as DatasetType[];
                     allDatasets.forEach(dataset => {
                         // If threshold is not specified or less than 1, set it to 1
                         const currentValue = thresholds[dataset];
@@ -371,11 +564,54 @@ export function VercelV0Chat() {
                         console.log(`Set threshold for ${dataset} to ${value}`);
                     });
                     
+                    // Switch the view mode in the DataControls component if needed
+                    if (regions.length > 0) {
+                        // Need to put DataControls in region mode first
+                        const viewModeButtons = Array.from(document.querySelectorAll('button'));
+                        const regionsButton = viewModeButtons.find(btn => 
+                            btn.textContent?.includes('Regions')
+                        );
+                        
+                        if (regionsButton) {
+                            console.log("Switching to Regions mode");
+                            regionsButton.click();
+                            
+                            // Allow a moment for the UI to update
+                            setTimeout(() => {
+                                // Select the specific regions
+                                regions.forEach(region => {
+                                    const regionButtons = Array.from(document.querySelectorAll('button'));
+                                    const regionButton = regionButtons.find(btn => 
+                                        btn.textContent?.replace(/\s+/g, ' ').includes(region.replace(/_/g, ' '))
+                                    );
+                                    
+                                    if (regionButton) {
+                                        console.log(`Selecting region: ${region}`);
+                                        regionButton.click();
+                                    }
+                                });
+                            }, 100);
+                        }
+                    } else if (countries.length > 0) {
+                        // Need to put DataControls in countries mode first
+                        const viewModeButtons = Array.from(document.querySelectorAll('button'));
+                        const countriesButton = viewModeButtons.find(btn => 
+                            btn.textContent?.includes('Countries')
+                        );
+                        
+                        if (countriesButton) {
+                            console.log("Switching to Countries mode");
+                            countriesButton.click();
+                        }
+                    }
+                    
                     // Set up the datasets and params in the context
+                    // Pass all parameters to loadGeoData, even if some are empty arrays
                     mapContext.loadGeoData(
-                        instructionData.data.datasets as DatasetType[],
-                        instructionData.data.countries as CountryType[],
-                        instructionData.data.years as number[]
+                        datasets as DatasetType[],
+                        countries as CountryType[],
+                        years as number[],
+                        regions as string[]
                     );
                     
                     // Find and click the Apply Filters button to apply all changes
@@ -392,14 +628,19 @@ export function VercelV0Chat() {
                         } else {
                             console.error("Could not find Apply Filters button");
                         }
-                    }, 100); // Short delay to ensure state updates have propagated
+                    }, 300); // Longer delay to ensure state updates have propagated
                     
-                    // Construct a response message
-                    const datasets = instructionData.data.datasets.join(', ');
-                    const countries = instructionData.data.countries.map(c => c.replace('_', ' ')).join(', ');
-                    const years = instructionData.data.years.join(', ');
+                    // Construct a response message based on whether we're using regions or countries
+                    const datasetNames = datasets.join(', ');
+                    const yearRange = years.join(', ');
                     
-                    return `I've loaded ${datasets} data for ${countries} (${years}).`;
+                    if (regions.length > 0) {
+                        const regionNames = regions.map(r => r.replace(/_/g, ' ')).join(', ');
+                        return `I've loaded ${datasetNames} data for regions: ${regionNames} (${yearRange}).`;
+                    } else {
+                        const countryNames = countries.map(c => c.replace(/_/g, ' ')).join(', ');
+                        return `I've loaded ${datasetNames} data for countries: ${countryNames} (${yearRange}).`;
+                    }
                 }
                 // Fallback to the old GeoJSON handling for backward compatibility
                 else if (instructionData.data.geojson) {
@@ -464,8 +705,8 @@ export function VercelV0Chat() {
                 
                 if (instructionData.action === 'loadData' && 
                     instructionData.data?.datasets && 
-                    instructionData.data?.countries && 
-                    instructionData.data?.years) {
+                    instructionData.data?.years && 
+                    (instructionData.data?.countries || instructionData.data?.regions)) {
                     
                     // Set threshold values, ensuring minimum of 1 for each dataset
                     const thresholds = instructionData.data.thresholds && typeof instructionData.data.thresholds === 'object' 
@@ -491,8 +732,9 @@ export function VercelV0Chat() {
                     // Set up the data in the map context
                     mapContext.loadGeoData(
                         instructionData.data.datasets as DatasetType[],
-                        instructionData.data.countries as CountryType[],
-                        instructionData.data.years as number[]
+                        instructionData.data.countries as CountryType[] || [],
+                        instructionData.data.years as number[],
+                        instructionData.data.regions as string[] || []
                     );
                     
                     // Find and click the Apply Filters button to apply all changes
@@ -632,7 +874,77 @@ export function VercelV0Chat() {
                                             : "bg-gray-100/0 text-black"
                                     )}
                                 >
-                                    {message.type === "ai" ? (
+                                    {message.type === "media" ? (
+                                        <div className="media-message">
+                                            {/* Show the message content text */}
+                                            {message.content && (
+                                                <div className="media-message-text mb-2">
+                                                    {message.content}
+                                                </div>
+                                            )}
+                                            
+                                            {/* Render the media content */}
+                                            {message.media && (
+                                                <div className="media-container rounded-lg overflow-hidden border border-gray-200">
+                                                    {/* Media title */}
+                                                    {message.media.title && (
+                                                        <div className="media-title bg-gray-100 px-3 py-2 text-sm font-medium">
+                                                            {message.media.title}
+                                                        </div>
+                                                    )}
+                                                    
+                                                    {/* Render based on media type */}
+                                                    {message.media.type === 'gif' && (
+                                                        <div className="media-content p-1">
+                                                            {/* Use iframe with proper parameters */}
+                                                            <iframe
+                                                                src={message.media.iframe_url || 
+                                                                    `http://localhost:8000/timeline-view?${
+                                                                        new URLSearchParams({
+                                                                            country: (message.media.metadata?.country as string) || 'Mali',
+                                                                            dataset: (message.media.metadata?.dataset as string) || 'PopDensity',
+                                                                            start: String((message.media.metadata?.years as number[])?.[0] || 2015),
+                                                                            end: String((message.media.metadata?.years as number[])?.[
+                                                                                (message.media.metadata?.years as number[])?.length - 1 || 0
+                                                                            ] || 2020),
+                                                                            t: String(new Date().getTime())
+                                                                        }).toString()
+                                                                    }`
+                                                                }
+                                                                title={message.media.title || "Timeline Animation"}
+                                                                width="100%"
+                                                                height="400px"
+                                                                style={{ border: 'none', borderRadius: '4px' }}
+                                                                sandbox="allow-scripts"
+                                                                loading="lazy"
+                                                                onLoad={() => console.log("iframe loaded successfully")}
+                                                                onError={() => console.error("iframe failed to load")}
+                                                            ></iframe>
+                                                            
+                                                            {/* Direct link as a fallback */}
+                                                            <div className="text-center mt-2 text-xs">
+                                                                <a 
+                                                                    href="http://localhost:8000/timeline-view" 
+                                                                    target="_blank" 
+                                                                    rel="noopener noreferrer"
+                                                                    className="text-blue-500 hover:text-blue-600"
+                                                                >
+                                                                    Open timeline in new window
+                                                                </a>
+                                                            </div>
+                                                        </div>
+                                                    )}
+                                                    
+                                                    {/* Show years if available in metadata */}
+                                                    {message.media.metadata?.years && Array.isArray(message.media.metadata.years) && (
+                                                        <div className="timeline-years bg-gray-100 px-3 py-1 text-xs text-gray-600 text-center">
+                                                            Years: {message.media.metadata.years.join(', ')}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            )}
+                                        </div>
+                                    ) : message.type === "ai" ? (
                                         <div className="chat-markdown">
                                             <ReactMarkdown
                                                 remarkPlugins={[remarkGfm]}
@@ -716,6 +1028,28 @@ export function VercelV0Chat() {
                                 )}
                             >
                                 <ArrowUpIcon className="h-4 w-4" />
+                            </button>
+                        </div>
+                        
+                        {/* Debug buttons to add timeline links with different parameters */}
+                        <div className="mt-2 text-center flex flex-wrap justify-center gap-2">
+                            <button
+                                onClick={() => addTimelineLinkToChat("Mali", "PopDensity", 2015, 2020)}
+                                className="text-xs text-blue-600 hover:text-blue-800 bg-blue-100 hover:bg-blue-200 px-3 py-1 rounded-full"
+                            >
+                                Mali Pop. Density
+                            </button>
+                            <button
+                                onClick={() => addTimelineLinkToChat("Chad", "Precipitation", 2015, 2020)}
+                                className="text-xs text-green-600 hover:text-green-800 bg-green-100 hover:bg-green-200 px-3 py-1 rounded-full"
+                            >
+                                Chad Precipitation
+                            </button>
+                            <button
+                                onClick={() => addTimelineLinkToChat("Niger", "PopDensity", 2010, 2020)}
+                                className="text-xs text-purple-600 hover:text-purple-800 bg-purple-100 hover:bg-purple-200 px-3 py-1 rounded-full"
+                            >
+                                Niger Full Timeline
                             </button>
                         </div>
                     </div>
