@@ -11,17 +11,26 @@ class MapBoxActions(Enum):
 
 
 class MapBoxActionList(BaseModel):
-    actions: list[MapBoxActions] = Field(default_factory=list, description="List of actions to be performed on the mapbox in the frontend, always zoom to a country after setting the geojson. Never fly to and zoom as two separate actions")
+    actions: list[MapBoxActions] = Field(
+        default_factory=list,
+        description="List of actions to be performed on the mapbox in the frontend, always zoom to a country after setting the geojson. Never fly to and zoom as two separate actions",
+    )
 
 
 class MapBoxInstruction(BaseModel):
-    action: MapBoxActions = Field(default=MapBoxActions.NONE, description="Action to be performed on the mapbox in the frontend") 
+    action: MapBoxActions = Field(
+        default=MapBoxActions.NONE,
+        description="Action to be performed on the mapbox in the frontend",
+    )
     data: dict = Field(default_factory={})
 
 
 class GeoChatResponse(BaseModel):
     ai_message: str = Field(description="Response from the AI model")
-    mapbox_instruction: MapBoxInstruction = Field(default_factory=MapBoxInstruction, description="Instruction to be performed on the mapbox in the frontend")
+    mapbox_instruction: MapBoxInstruction = Field(
+        default_factory=MapBoxInstruction,
+        description="Instruction to be performed on the mapbox in the frontend",
+    )
 
 
 class AvailableSteps(Enum):

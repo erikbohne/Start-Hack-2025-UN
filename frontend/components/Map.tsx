@@ -420,6 +420,94 @@ export default function Map() {
     [animating, animateStep, contextChangeAnimationSpeed]
   );
 
+  // Helper function to zoom to the selected areas (regions or countries)
+  const zoomToSelectedAreas = useCallback(() => {
+    if (!map.current || !mapIsReady.current) return;
+    
+    // Find all active layers for the current year
+    const currentYear = displayYear;
+    if (!currentYear) return;
+    
+    // Get all visible layers for the current year
+    const visibleLayers = activeLayers.current.filter(layerId => {
+      const parts = layerId.split("-");
+      const layerYear = parts.length > 2 ? parseInt(parts[parts.length - 1]) : -1;
+      return layerYear === currentYear;
+    });
+    
+    if (visibleLayers.length === 0) return;
+    
+    // Collect all features from visible layers to calculate bounding box
+    const allCoordinates: [number, number][] = [];
+    
+    visibleLayers.forEach(layerId => {
+      const source = map.current?.getSource(layerId) as mapboxgl.GeoJSONSource;
+      if (!source) return;
+      
+      try {
+        // Access the GeoJSON data
+        const data = (source as any)._data;
+        if (!data || !data.features) return;
+        
+        // Extract coordinates from all features
+        data.features.forEach((feature: any) => {
+          if (!feature.geometry || !feature.geometry.coordinates) return;
+          
+          // Handle different geometry types
+          if (feature.geometry.type === 'Polygon') {
+            feature.geometry.coordinates[0].forEach((coord: [number, number]) => {
+              allCoordinates.push(coord);
+            });
+          } else if (feature.geometry.type === 'MultiPolygon') {
+            feature.geometry.coordinates.forEach((polygon: any) => {
+              polygon[0].forEach((coord: [number, number]) => {
+                allCoordinates.push(coord);
+              });
+            });
+          }
+        });
+      } catch (err) {
+        console.error('Error accessing source data:', err);
+      }
+    });
+    
+    if (allCoordinates.length === 0) return;
+    
+    // Calculate bounding box
+    let minLng = Infinity;
+    let maxLng = -Infinity;
+    let minLat = Infinity;
+    let maxLat = -Infinity;
+    
+    allCoordinates.forEach(([lng, lat]) => {
+      minLng = Math.min(minLng, lng);
+      maxLng = Math.max(maxLng, lng);
+      minLat = Math.min(minLat, lat);
+      maxLat = Math.max(maxLat, lat);
+    });
+    
+    // Add padding
+    const padding = 50;
+    const bounds = new mapboxgl.LngLatBounds(
+      [minLng, minLat],
+      [maxLng, maxLat]
+    );
+    
+    // Zoom to fit the bounds
+    map.current.fitBounds(bounds, {
+      padding: {
+        top: padding,
+        bottom: padding + 100, // Extra padding for bottom controls
+        left: padding,
+        right: padding
+      },
+      maxZoom: 8, // Limit maximum zoom level
+      duration: 1500 // Animation duration in milliseconds
+    });
+    
+    console.log('Zoomed to area bounds:', {minLng, maxLng, minLat, maxLat});
+  }, [map, mapIsReady, displayYear, activeLayers]);
+  
   // Function to load geospatial data from the backend
   const loadGeoData = async (
     datasets: DatasetType[],
@@ -903,6 +991,16 @@ export default function Map() {
             year => yearDatasetMap && yearDatasetMap[year] && yearDatasetMap[year].length > 0
           );
           
+          // Check if some years are missing data
+          const missingDataYears = yearSequence.current.filter(
+            year => !yearDatasetMap || !yearDatasetMap[year] || yearDatasetMap[year].length === 0
+          );
+          
+          if (missingDataYears.length > 0) {
+            // Notify user of years with missing data
+            setError(`Some years have no data available: ${missingDataYears.join(', ')}. These years will be skipped during animation.`);
+          }
+          
           if (yearsWithData.length > 0) {
             const firstValidYear = yearsWithData[0];
             const firstValidYearIndex = yearSequence.current.indexOf(firstValidYear);
@@ -910,10 +1008,16 @@ export default function Map() {
             
             console.log(`Setting initial year to ${firstValidYear} (index ${firstValidYearIndex}). Active layers:`, activeLayers.current);
             updateVisibleYear(firstValidYear);
+            
+            // Add a slight delay to ensure layers are rendered before zooming
+            setTimeout(() => {
+              zoomToSelectedAreas();
+            }, 800);
           } else {
             // Fallback to first year even if it has no data
             const firstYear = yearSequence.current[0];
             console.log(`No years have valid data. Defaulting to ${firstYear}.`);
+            setError(`No data available for any of the selected years. Please try different selections.`);
             updateVisibleYear(firstYear);
           }
         }
@@ -1044,7 +1148,7 @@ export default function Map() {
           {datasetCountryCombo.current.some(
             ({ dataset }) => dataset === "PopDensity"
           ) && (
-            <div className="mb-2">
+            <div className="mb-3">
               <div className="flex justify-between items-center">
                 <div className="text-xs font-semibold text-gray-700">Population Density</div>
                 {thresholdValues.PopDensity > 0 && (
@@ -1055,10 +1159,18 @@ export default function Map() {
               </div>
               <div className="flex items-center">
                 <div className="w-full h-4 bg-gradient-to-r from-[rgb(255,245,235)] to-[rgb(165,15,21)] rounded-sm"></div>
-                <div className="flex justify-between w-full px-1 text-xs mt-1 text-gray-600">
-                  <span>Low</span>
-                  <span>High</span>
-                </div>
+              </div>
+              <div className="flex justify-between w-full text-xs mt-1 text-gray-600">
+                <span>
+                  {datasetRanges.current.PopDensity?.min.toLocaleString(undefined, {
+                    maximumFractionDigits: 1
+                  })}
+                </span>
+                <span>
+                  {datasetRanges.current.PopDensity?.max.toLocaleString(undefined, {
+                    maximumFractionDigits: 0
+                  })} people/km²
+                </span>
               </div>
             </div>
           )}
@@ -1076,10 +1188,18 @@ export default function Map() {
               </div>
               <div className="flex items-center">
                 <div className="w-full h-4 bg-gradient-to-r from-[rgb(240,249,255)] to-[rgb(8,48,107)] rounded-sm"></div>
-                <div className="flex justify-between w-full px-1 text-xs mt-1 text-gray-600">
-                  <span>Low</span>
-                  <span>High</span>
-                </div>
+              </div>
+              <div className="flex justify-between w-full text-xs mt-1 text-gray-600">
+                <span>
+                  {datasetRanges.current.Precipitation?.min.toLocaleString(undefined, {
+                    maximumFractionDigits: 1
+                  })}
+                </span>
+                <span>
+                  {datasetRanges.current.Precipitation?.max.toLocaleString(undefined, {
+                    maximumFractionDigits: 0
+                  })} mm
+                </span>
               </div>
             </div>
           )}
@@ -1116,6 +1236,7 @@ export default function Map() {
             }
             return null;
           })()}
+          {/* Direct year handling function for immediate updates */}
           <input
             type="range"
             min={0}
@@ -1129,11 +1250,28 @@ export default function Map() {
               const yearDatasetMap = (window as unknown).yearDatasetMap as Record<number, string[]>;
               const hasData = yearDatasetMap && yearDatasetMap[year] && yearDatasetMap[year].length > 0;
               
+              // First, update the current year index regardless of data availability
+              // This ensures the slider position matches the selected year
+              currentYearIndexRef.current = index;
+              
               if (hasData) {
-                handleYearSelection(index);
+                // Display the year immediately if it has data
+                console.log(`Slider selecting year ${year}`);
+                updateVisibleYear(year);
               } else {
-                // Find closest year with data
+                // If this year doesn't have data, find the closest year with data
                 console.log(`Year ${year} has no data, finding closest year with data...`);
+                
+                // Temporarily disable animation if it's running
+                let wasAnimating = false;
+                if (animating) {
+                  wasAnimating = true;
+                  setAnimating(false);
+                  if (animationTimerRef.current !== null) {
+                    clearTimeout(animationTimerRef.current);
+                    animationTimerRef.current = null;
+                  }
+                }
                 
                 // Check which years have data
                 const yearsWithDataIndices = yearSequence.current.map((yr, idx) => {
@@ -1157,8 +1295,26 @@ export default function Map() {
                     }
                   });
                   
-                  console.log(`Found closest year with data: ${yearSequence.current[closestIndex]}`);
-                  handleYearSelection(closestIndex);
+                  const closestYear = yearSequence.current[closestIndex];
+                  console.log(`Found closest year with data: ${closestYear}`);
+                  
+                  // Show a message to the user indicating we're jumping to a year with data
+                  setError(`Year ${year} has no data. Showing ${closestYear} instead.`);
+                  // Don't automatically clear the error - we'll let the user dismiss it or it will be replaced
+                  // by the next error message if any
+                  
+                  // Update the current year index to the closest valid year
+                  currentYearIndexRef.current = closestIndex;
+                  // Display the closest year
+                  updateVisibleYear(closestYear);
+                  
+                  // Resume animation if it was running
+                  if (wasAnimating) {
+                    setTimeout(() => setAnimating(true), 1500);
+                  }
+                } else {
+                  setError(`No years with data available`);
+                  // Keep the error displayed until user interaction
                 }
               }
             }}
@@ -1173,7 +1329,24 @@ export default function Map() {
               return (
                 <button
                   key={year}
-                  onClick={() => handleYearSelection(index)}
+                  onClick={() => {
+                    if (hasData) {
+                      // Update the current year index
+                      currentYearIndexRef.current = index;
+                      // Display the year immediately
+                      console.log(`Directly selecting year ${year}`);
+                      try {
+                        // Get the year dataset map to verify data
+                        const yearDatasetMap = (window as unknown).yearDatasetMap as Record<number, string[]>;
+                        if (!yearDatasetMap || !yearDatasetMap[year] || yearDatasetMap[year].length === 0) {
+                          console.warn(`Warning: Year ${year} was marked as having data but none found in yearDatasetMap`);
+                        }
+                        updateVisibleYear(year);
+                      } catch (err) {
+                        console.error(`Error displaying year ${year}:`, err);
+                      }
+                    }
+                  }}
                   className={`text-xs px-1 py-0.5 rounded transition-colors duration-200 ${
                     currentYearIndexRef.current === index
                       ? "bg-blue-500 text-white font-bold"
@@ -1242,7 +1415,22 @@ export default function Map() {
           </div>
 
           {displayYear && (
-            <div className="text-lg font-bold text-gray-800">Year: {displayYear}</div>
+            <div className="text-lg font-bold text-gray-800">
+              Year: {displayYear}
+              {(() => {
+                // Check if the current displayed year actually has data
+                const yearDatasetMap = (window as unknown).yearDatasetMap as Record<number, string[]>;
+                const hasData = yearDatasetMap && yearDatasetMap[displayYear] && yearDatasetMap[displayYear].length > 0;
+                if (!hasData) {
+                  return (
+                    <span className="text-xs ml-1 text-yellow-500 font-normal">
+                      (nearest with data)
+                    </span>
+                  );
+                }
+                return null;
+              })()}
+            </div>
           )}
         </div>
       )}
@@ -1293,14 +1481,6 @@ export default function Map() {
           </div>
         </details>
       </div>
-
-      {/* Error message */}
-      {error && (
-        <div className="absolute top-36 right-4 bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg shadow-lg z-20">
-          <strong className="font-bold">Error: </strong>
-          <span className="block sm:inline">{error}</span>
-        </div>
-      )}
     </div>
   );
 }

@@ -123,6 +123,13 @@ export default function DataControls({
 
   // Handle toggling a country selection
   const toggleCountry = (country: CountryType) => {
+    // If we're selecting a country, make sure we're in countries mode
+    // and clear any selected regions
+    if (viewMode !== 'countries') {
+      setViewMode('countries');
+      setSelectedRegions([]);
+    }
+    
     setSelectedCountries(prev => 
       prev.includes(country)
         ? prev.filter(c => c !== country)
@@ -132,6 +139,13 @@ export default function DataControls({
 
   // Handle toggling a region selection
   const toggleRegion = (region: RegionType) => {
+    // If we're selecting a region, make sure we're in regions mode
+    // and clear any selected countries
+    if (viewMode !== 'regions') {
+      setViewMode('regions');
+      setSelectedCountries([]);
+    }
+    
     setSelectedRegions(prev => 
       prev.includes(region)
         ? prev.filter(r => r !== region)
@@ -377,7 +391,9 @@ export default function DataControls({
         onClick={handleApply}
         className="w-full py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-md transition-colors duration-200 font-medium"
       >
-        Apply Filters
+        {viewMode === 'countries' 
+          ? `Apply Filters (${selectedCountries.length} ${selectedCountries.length === 1 ? 'Country' : 'Countries'})` 
+          : `Apply Filters (${selectedRegions.length} ${selectedRegions.length === 1 ? 'Region' : 'Regions'})`}
       </button>
     </div>
   );

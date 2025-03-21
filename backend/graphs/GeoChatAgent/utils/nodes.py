@@ -1,8 +1,14 @@
 from graphs.GeoChatAgent.utils.state import GraphState
-from graphs.GeoChatAgent.utils.models import AvailableSteps, RouteUserMessage, MapBoxActionList, MapBoxActions, MapBoxInstruction
-from langchain_core.messages import SystemMessage, AIMessage, HumanMessage
+from graphs.GeoChatAgent.utils.models import (
+    AvailableSteps,
+    RouteUserMessage,
+    MapBoxActionList,
+    MapBoxActions,
+    MapBoxInstruction,
+)
+from langchain_core.messages import SystemMessage, AIMessage
 from langchain_groq import ChatGroq
-from typing import Literal, List
+from typing import Literal
 from dotenv import load_dotenv
 import os
 import json
@@ -18,7 +24,9 @@ llm = ChatGroq(
 )
 
 
-def route_user_message(state: GraphState) -> Literal["chat_agent", "create_instructions", "analyze_data"]:
+def route_user_message(
+    state: GraphState,
+) -> Literal["chat_agent", "create_instructions", "analyze_data"]:
     """Routes to the chat_agent node, instructions node, or data analysis node."""
     system_content = """Determine whether the user's message requires map interaction or data analysis.
         
@@ -60,18 +68,18 @@ def route_user_message(state: GraphState) -> Literal["chat_agent", "create_instr
         
         Otherwise choose CHAT_AGENT.
         """
-    
+
     # Add map context if available
     if state.get("map_context"):
         system_content += f"\n\n{state['map_context']}"
-    
+
     system_message = SystemMessage(content=system_content)
-    
+
     messages = [system_message] + state["messages"]
     next = llm.with_structured_output(RouteUserMessage).invoke(messages)
-    
+
     print(f"Routing decision: {next.route}")
-    
+
     if next.route == AvailableSteps.CHAT_AGENT:
         return "chat_agent"
     elif next.route == AvailableSteps.MAPBOX_INSTRUCTIONS:
@@ -86,27 +94,27 @@ def analyze_data(state: GraphState):
     active_datasets = []
     active_countries = []
     active_years = []
-    
+
     if state.get("map_context"):
         map_context = state["map_context"]
-        
+
         # Parse the map context to extract information
-        for line in map_context.split('\n'):
+        for line in map_context.split("\n"):
             if "Active datasets:" in line:
                 datasets_text = line.split("Active datasets:")[1].strip()
-                active_datasets = [d.strip() for d in datasets_text.split(',')]
+                active_datasets = [d.strip() for d in datasets_text.split(",")]
             elif "Countries shown:" in line:
                 countries_text = line.split("Countries shown:")[1].strip()
-                active_countries = [c.strip() for c in countries_text.split(',')]
+                active_countries = [c.strip() for c in countries_text.split(",")]
             elif "Available years:" in line:
                 years_text = line.split("Available years:")[1].strip()
-                active_years = [int(y.strip()) for y in years_text.split(',')]
+                active_years = [int(y.strip()) for y in years_text.split(",")]
             elif "Currently displaying year:" in line:
                 current_year_text = line.split("Currently displaying year:")[1].strip()
                 current_year = int(current_year_text)
                 if current_year not in active_years:
                     active_years.append(current_year)
-    
+
     # Get or set default values
     if not active_datasets:
         active_datasets = ["PopDensity", "Precipitation"]
@@ -114,54 +122,68 @@ def analyze_data(state: GraphState):
         active_countries = ["Mali", "Chad", "Niger"]  # Default selection
     if not active_years:
         active_years = [2015, 2016, 2017, 2018, 2019, 2020]  # Recent years
-    
+
     # Normalize country names (replace spaces with underscores)
     active_countries = [c.replace(" ", "_") for c in active_countries]
-    
+
     # Collect analysis results
     analysis_results = {
         "statistics": {},
         "temporal_trends": {},
         "regional_comparisons": {},
-        "correlations": {}
+        "correlations": {},
     }
-    
+
     # Generate statistics for each dataset and country
     for dataset in active_datasets:
         for country in active_countries:
             if active_years:
                 # Use the most recent year for statistics
                 most_recent_year = max(active_years)
-                geojson = DataAnalysisTool.get_geojson_data(dataset, country, most_recent_year)
-                
+                geojson = DataAnalysisTool.get_geojson_data(
+                    dataset, country, most_recent_year
+                )
+
                 if geojson:
                     values = DataAnalysisTool.extract_data_values(geojson)
                     stats = DataAnalysisTool.calculate_statistics(values)
-                    analysis_results["statistics"][f"{dataset}_{country}_{most_recent_year}"] = stats
-    
+                    analysis_results["statistics"][
+                        f"{dataset}_{country}_{most_recent_year}"
+                    ] = stats
+
     # Generate temporal trends analysis
     for dataset in active_datasets:
         for country in active_countries:
             if len(active_years) > 1:  # Need multiple years for trend analysis
-                trends = DataAnalysisTool.analyze_temporal_trends(dataset, country, active_years)
+                trends = DataAnalysisTool.analyze_temporal_trends(
+                    dataset, country, active_years
+                )
                 analysis_results["temporal_trends"][f"{dataset}_{country}"] = trends
-    
+
     # Generate regional comparisons
     for dataset in active_datasets:
-        if len(active_countries) > 1 and active_years:  # Need multiple countries for comparison
+        if (
+            len(active_countries) > 1 and active_years
+        ):  # Need multiple countries for comparison
             most_recent_year = max(active_years)
-            comparisons = DataAnalysisTool.compare_regions(dataset, active_countries, most_recent_year)
-            analysis_results["regional_comparisons"][f"{dataset}_{most_recent_year}"] = comparisons
-    
+            comparisons = DataAnalysisTool.compare_regions(
+                dataset, active_countries, most_recent_year
+            )
+            analysis_results["regional_comparisons"][
+                f"{dataset}_{most_recent_year}"
+            ] = comparisons
+
     # Generate correlation analysis
     for country in active_countries:
-        if len(active_datasets) > 1 and active_years:  # Need both datasets for correlation
+        if (
+            len(active_datasets) > 1 and active_years
+        ):  # Need both datasets for correlation
             correlations = DataAnalysisTool.analyze_correlations(country, active_years)
             analysis_results["correlations"][country] = correlations
-    
+
     # Format analysis results for LLM
     analysis_json = json.dumps(analysis_results, indent=2)
-    
+
     # Create detailed system prompt with the analysis data
     system_content = f"""You are a data analyst specializing in geospatial data analysis for UN climate and population data.
 
@@ -187,17 +209,17 @@ Important:
 - Use clear, non-technical language for a general audience
 - When discussing trends, be specific about the magnitude and significance of changes
 """
-    
+
     # Add map context if available
     if state.get("map_context"):
         system_content += f"\n\nMap context information:\n{state['map_context']}"
-        
+
     system_message = SystemMessage(content=system_content)
-    
+
     # Get the analysis from the LLM
     messages = [system_message] + state["messages"]
     analysis_response = llm.invoke(messages)
-    
+
     # Return the analysis as a message
     return {"messages": [AIMessage(content=analysis_response.content)]}
 
@@ -242,14 +264,16 @@ def create_instructions(state: GraphState):
         
         Convert the user's request into a sequence of map actions.
         """
-    
+
     # Add map context if available
     if state.get("map_context"):
         system_content += f"\n\n{state['map_context']}"
-        
+
     system_message = SystemMessage(content=system_content)
-    
-    instructions = llm.with_structured_output(MapBoxActionList).invoke(state["messages"])
+
+    instructions = llm.with_structured_output(MapBoxActionList).invoke(
+        state["messages"]
+    )
     print(f"Created instructions: {instructions.actions}")
     return {"instructions_list": instructions.actions}
 
@@ -262,14 +286,18 @@ def chat_agent(state: GraphState):
         
         Keep answers concise and focused on the user's question.
         """
-    
+
     # Add map context if available
     if state.get("map_context"):
         system_content += f"\n\n{state['map_context']}"
-        
+
     system_message = SystemMessage(content=system_content)
-    
-    return {"messages": llm.with_config(tags=["answer"]).invoke([system_message] + state["messages"])}
+
+    return {
+        "messages": llm.with_config(tags=["answer"]).invoke(
+            [system_message] + state["messages"]
+        )
+    }
 
 
 def instructions(state: GraphState):
@@ -279,19 +307,16 @@ def instructions(state: GraphState):
         state["frontend_actions"] = []
 
     next_action = state["instructions_list"].pop(0)
-    
+
     # Get the user's original question
     user_message = state["messages"][-1].content.lower() if state["messages"] else ""
     print(f"User message: {user_message}")
-    
+
     if next_action == MapBoxActions.ANALYZE_DATA:
         # Create an instruction for data analysis
-        instruct = MapBoxInstruction(
-            action=MapBoxActions.ANALYZE_DATA,
-            data={}
-        )
+        instruct = MapBoxInstruction(action=MapBoxActions.ANALYZE_DATA, data={})
         state["frontend_actions"].append(instruct)
-        
+
         # Generate a response about the analysis
         system_content = """You are a helpful Geography assistant.
             The system is now performing a data analysis on the currently displayed map data.
@@ -299,19 +324,19 @@ def instructions(state: GraphState):
             Tell the user that you are analyzing the data and they will receive insights shortly.
             Keep your response brief and focused.
             """
-            
+
         # Add map context if available
         if state.get("map_context"):
             system_content += f"\n\n{state['map_context']}"
-        
+
         system_message = SystemMessage(content=system_content)
-        
+
         # Generate a response
         llm_response = llm.invoke([system_message] + state["messages"])
         state["messages"] = [AIMessage(content=llm_response.content)]
-        
+
         return state
-    
+
     elif next_action == MapBoxActions.SET_CENTER:
         # Use LLM to generate map center instruction
         system_content = """You are going to set the center of the map based on the user's query.
@@ -367,20 +392,28 @@ def instructions(state: GraphState):
             
             DO NOT return string names for locations. Always use coordinates.
             """
-        
+
         # Add map context if available
         if state.get("map_context"):
             system_content += f"\n\n{state['map_context']}"
-            
+
         system_message = SystemMessage(content=system_content)
-        
+
         # Ask LLM to generate the instruction
-        instruct = llm.with_structured_output(MapBoxInstruction).invoke([system_message] + state["messages"])
-        
+        instruct = llm.with_structured_output(MapBoxInstruction).invoke(
+            [system_message] + state["messages"]
+        )
+
         # Safety check - if we don't get proper coordinates
-        if not instruct.data or "center" not in instruct.data or not isinstance(instruct.data["center"], list):
-            print("Warning: LLM didn't return proper coordinates - trying again with a simpler prompt")
-            
+        if (
+            not instruct.data
+            or "center" not in instruct.data
+            or not isinstance(instruct.data["center"], list)
+        ):
+            print(
+                "Warning: LLM didn't return proper coordinates - trying again with a simpler prompt"
+            )
+
             # If the LLM fails, try a simpler prompt that's more likely to succeed
             system_content = """Extract the location from the user's query and return its coordinates.
                 
@@ -395,34 +428,36 @@ def instructions(state: GraphState):
                 
                 Be precise with the coordinates. DO NOT add any explanations.
                 """
-                
+
             # Add map context if available
             if state.get("map_context"):
                 system_content += f"\n\n{state['map_context']}"
-                
+
             system_message = SystemMessage(content=system_content)
-            
+
             # Try one more time with a simpler prompt
             try:
-                instruct = llm.with_structured_output(MapBoxInstruction).invoke([system_message] + state["messages"])
+                instruct = llm.with_structured_output(MapBoxInstruction).invoke(
+                    [system_message] + state["messages"]
+                )
                 print(f"Second attempt result: {instruct}")
             except Exception as e:
                 print(f"Error in second LLM attempt: {e}")
                 # Create a basic instruction as a last resort
                 instruct.data = {"center": [0, 0], "zoom": 2}  # World view as fallback
-        
+
         # Debug the instruction format
         print(f"SET_CENTER instruction created: {instruct}")
         print(f"Instruction data: {instruct.data}")
-        
+
         # Initialize frontend_actions if not already present
         if "frontend_actions" not in state:
             state["frontend_actions"] = []
-        
+
         # Clear existing actions and add this one
         state["frontend_actions"] = []
         state["frontend_actions"].append(instruct)
-        
+
     elif next_action == MapBoxActions.SET_ZOOM:
         system_content = """You are going to set the zoom level of the map.
             For example:
@@ -434,16 +469,18 @@ def instructions(state: GraphState):
             }
             Zoom levels range from 1 (world view) to 22 (street level).
             """
-            
+
         # Add map context if available
         if state.get("map_context"):
             system_content += f"\n\n{state['map_context']}"
-            
+
         system_message = SystemMessage(content=system_content)
-        
-        instruct = llm.with_structured_output(MapBoxInstruction).invoke([system_message] + state["messages"])
+
+        instruct = llm.with_structured_output(MapBoxInstruction).invoke(
+            [system_message] + state["messages"]
+        )
         state["frontend_actions"].append(instruct)
-        
+
     elif next_action == MapBoxActions.SET_GEOJSON:
         system_content = """You are going to set GeoJSON data parameters on the map.
             You need to provide the datasets, countries, and years to display.
@@ -485,16 +522,18 @@ def instructions(state: GraphState):
             You can set threshold values to filter the data. For example, if the user asks to see areas with population 
             density above 50, set the threshold for "PopDensity" to 50.
             """
-            
+
         # Add map context if available
         if state.get("map_context"):
             system_content += f"\n\n{state['map_context']}"
-            
+
         system_message = SystemMessage(content=system_content)
-        
-        instruct = llm.with_structured_output(MapBoxInstruction).invoke([system_message] + state["messages"])
+
+        instruct = llm.with_structured_output(MapBoxInstruction).invoke(
+            [system_message] + state["messages"]
+        )
         state["frontend_actions"].append(instruct)
-    
+
     # Let the LLM generate an appropriate response
     system_content = """You are a helpful Geography assistant. 
         The system has just performed a map action based on the user's request.
@@ -508,34 +547,34 @@ def instructions(state: GraphState):
         
         Be concise but informative.
         """
-    
+
     # Add map context if available
     if state.get("map_context"):
         system_content += f"\n\n{state['map_context']}"
-    
+
     system_message = SystemMessage(content=system_content)
-    
+
     # Generate a natural response
     # Include the user's original message for better context
     original_message = state["messages"][-1] if state["messages"] else None
-    
+
     # Create a message list with the system prompt and the user's original message
     prompt_messages = [system_message]
     if original_message:
         prompt_messages.append(original_message)
-    
+
     # Generate the response
     llm_response = llm.invoke(prompt_messages)
-    
+
     # Make sure the AI response isn't empty to ensure the frontend shows a message
     if not llm_response.content.strip():
         # If the LLM didn't generate a response, provide a default one
         response_content = "I've updated the map based on your request."
     else:
         response_content = llm_response.content
-        
+
     state["messages"] = [AIMessage(content=response_content)]
-    
+
     return state
 
 
