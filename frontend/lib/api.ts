@@ -59,6 +59,51 @@ export async function fetchGeoData({
 }
 
 /**
+ * Exports currently viewed data as JSON
+ */
+export async function exportDataAsJSON({
+  datasets,
+  countries,
+  regions,
+  years,
+}: {
+  datasets: DatasetType[];
+  countries: CountryType[];
+  regions: RegionType[];
+  years: number[];
+}) {
+  try {
+    // First fetch the metadata
+    const metaData = await fetchGeoData({ datasets, countries, regions, years });
+    
+    // Initialize result object
+    const exportData: { [year: string]: { [dataset: string]: { [location: string]: any } } } = {};
+    
+    // Fetch actual GeoJSON data for each combination
+    for (const year of Object.keys(metaData)) {
+      exportData[year] = {};
+      
+      for (const dataset of Object.keys(metaData[parseInt(year)])) {
+        exportData[year][dataset] = {};
+        
+        const locations = metaData[parseInt(year)][dataset];
+        for (const location of Object.keys(locations)) {
+          const url = locations[location];
+          const geoJSON = await fetchGeoJSON(url);
+          exportData[year][dataset][location] = geoJSON;
+        }
+      }
+    }
+    
+    // Return the exported data
+    return exportData;
+  } catch (error) {
+    console.error('Error exporting data:', error);
+    throw error;
+  }
+}
+
+/**
  * Fetches a GeoJSON file from the backend
  */
 export async function fetchGeoJSON(url: string) {
