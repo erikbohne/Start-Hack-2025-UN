@@ -47,28 +47,24 @@ export default function Map() {
     handleYearSelection,
   } = useMapContext();
 
-  // Handle toggling between 2D and 3D mode
   const toggle3DMode = useCallback(() => {
+    const targetMode = !is3DMode;
     contextToggle3DMode();
 
-    // Need to recreate the map when changing projections
     if (map.current) {
-      // Store current state
       const center = map.current.getCenter();
       const zoom = map.current.getZoom();
 
-      // Remove existing map
       map.current.remove();
       map.current = null;
 
-      // Will be recreated on next render with new projection
       setTimeout(() => {
         if (!mapContainer.current) return;
 
         map.current = new mapboxgl.Map({
           container: mapContainer.current,
-          style: "mapbox://styles/adis123/cm2trla51000q01qw78sv431j",
-          projection: !is3DMode ? "globe" : "mercator", // Toggle to opposite of current state
+          style: targetMode ? "mapbox://styles/adis123/cm2trla51000q01qw78sv431j" : "mapbox://styles/mapbox/light-v11",
+          projection: targetMode ? "globe" : "mercator", // Use target mode instead of current state
           zoom: zoom,
           center: center,
           attributionControl: true,
@@ -79,11 +75,14 @@ export default function Map() {
         const mapInstance = map.current;
 
         mapInstance.on("load", () => {
-          console.log("Map recreated successfully");
-          // Add fog if switching to 3D mode
-          if (!is3DMode) {
-            // Using !is3DMode because state hasn't updated yet
+          console.log("Map recreated successfully with projection:", targetMode ? "globe" : "mercator");
+          // Add fog only if in 3D mode
+          if (targetMode) {
+            console.log("Adding fog for 3D mode");
             mapInstance.setFog({});
+          } else {
+            console.log("Removing fog for 2D mode");
+            mapInstance.setFog(null);
           }
           mapIsReady.current = true;
 
@@ -144,6 +143,8 @@ export default function Map() {
       "pk.eyJ1IjoiYWRpczEyMyIsImEiOiJjbTJxZjFtcTYwbXZyMmtyMWxlcWRqYnFhIn0.-SswCiDuWIyLZzoFFw-omQ";
 
     try {
+      console.log("Initializing map with projection:", is3DMode ? "globe" : "mercator");
+      
       // Initialize with current 3D mode setting
       map.current = new mapboxgl.Map({
         container: mapContainer.current,
@@ -163,16 +164,19 @@ export default function Map() {
       });
 
       mapInstance.on("load", () => {
-        console.log("Map loaded successfully");
+        console.log("Map loaded successfully with initial projection:", is3DMode ? "globe" : "mercator");
         // Add fog if in 3D mode
         if (is3DMode) {
+          console.log("Adding fog for initial 3D mode");
           mapInstance.setFog({});
+        } else {
+          console.log("No fog for initial 2D mode");
         }
         mapIsReady.current = true;
       });
 
       mapInstance.addControl(new mapboxgl.NavigationControl());
-      mapInstance.scrollZoom.enable(); // Enable scroll zoom for better usability
+      mapInstance.scrollZoom.enable();
     } catch (error) {
       console.error("Error initializing map:", error);
       setError("Failed to initialize map");
@@ -190,13 +194,10 @@ export default function Map() {
     };
   }, [is3DMode, setError]);
 
-  // Apply threshold filter to layers with debouncing for better performance
   const applyThresholdFilter = useCallback(() => {
     if (!map.current || !displayYear) return;
 
-    // Use requestAnimationFrame to align with browser's render cycle
     requestAnimationFrame(() => {
-      // Apply filters in batch for better performance
       const operations = datasetCountryCombo.current
         .map(({ dataset, country }) => {
           const layerId = `${dataset}-${country}-${displayYear}`;
@@ -226,44 +227,36 @@ export default function Map() {
     return () => clearTimeout(handler);
   }, [thresholdValues, applyThresholdFilter]);
 
-  // Optimized function to update which year's data is visible
   const updateVisibleYear = useCallback(
     (yearToShow: number) => {
       if (!map.current || !mapIsReady.current) return;
 
-      // Set state for UI display
       contextUpdateVisibleYear(yearToShow);
 
       requestAnimationFrame(() => {
-        // Get the year datasets we want to show
-        const yearDatasetMap = (window as unknown).yearDatasetMap as Record<
+        const yearDatasetMap = (window as any).yearDatasetMap as Record<
           number,
           string[]
         >;
         const datasetsToShow = yearDatasetMap?.[yearToShow] || [];
 
-        // Debug what datasets should be shown for this year
         console.log(
           `For year ${yearToShow}, should show datasets:`,
           datasetsToShow
         );
 
-        // Batch operations to minimize render cycles
         const hideOps: (() => void)[] = [];
         const showOps: (() => void)[] = [];
         const filterOps: (() => void)[] = [];
-        
-        // Track datasets that will be visible after this update
+
         const visibleDatasets = new Set<string>();
 
-        // Process all active layers
         activeLayers.current.forEach((layerId) => {
-          // Extract year from layerId (format: dataset-country-year or dataset-region-region-year)
           const parts = layerId.split("-");
           const layerYear =
             parts.length > 2 ? parseInt(parts[parts.length - 1]) : -1;
-          
-          // Get the dataset name from the layer ID
+
+          // Get thex dataset name from the layer ID
           const dataset = parts[0];
 
           if (!map.current?.getLayer(layerId)) return;
@@ -273,13 +266,11 @@ export default function Map() {
               layerId,
               "visibility"
             );
-            // Reconstruct the key exactly as it was stored in yearDatasetMap
             const datasetCountryKey = parts
               .slice(0, parts.length - 1)
               .join("-");
             const shouldBeVisible = datasetsToShow.includes(datasetCountryKey);
 
-            // Debug visibility determination
             console.log(`Layer ${layerId} for year ${yearToShow}:`, {
               visibility,
               datasetCountryKey,
@@ -292,7 +283,7 @@ export default function Map() {
               showOps.push(() =>
                 map.current?.setLayoutProperty(layerId, "visibility", "visible")
               );
-              
+
               filterOps.push(() =>
                 map.current?.setFilter(layerId, [
                   ">=",
@@ -300,11 +291,9 @@ export default function Map() {
                   thresholdValues[dataset],
                 ])
               );
-              
-              // Add dataset to visible ones
+
               visibleDatasets.add(dataset);
             } else if (visibility !== "none" && shouldBeVisible) {
-              // Layer is already visible and should remain visible
               visibleDatasets.add(dataset);
             }
           } else {
@@ -323,32 +312,30 @@ export default function Map() {
         hideOps.forEach((op) => op());
         showOps.forEach((op) => op());
         filterOps.forEach((op) => op());
-        
-        // Update datasetRanges for visible layers in this specific year
-        visibleDatasets.forEach(dataset => {
-          // Find the max value for this dataset in the current year
+
+        visibleDatasets.forEach((dataset) => {
           let yearMax = 0;
           let yearMin = Infinity;
           let foundValidValues = false;
-          
-          activeLayers.current.forEach(layerId => {
+
+          activeLayers.current.forEach((layerId) => {
             const parts = layerId.split("-");
             const layerDataset = parts[0];
-            const layerYear = parts.length > 2 ? parseInt(parts[parts.length - 1]) : -1;
-            
+            const layerYear =
+              parts.length > 2 ? parseInt(parts[parts.length - 1]) : -1;
+
             if (layerDataset === dataset && layerYear === yearToShow) {
-              // Get the source for this layer
-              const source = map.current?.getSource(layerId) as mapboxgl.GeoJSONSource;
+              const source = map.current?.getSource(
+                layerId
+              ) as mapboxgl.GeoJSONSource;
               if (!source) return;
-              
+
               try {
-                // Access the GeoJSON data
                 const data = (source as any)._data;
                 if (!data || !data.features) return;
-                
-                // Extract and process DN values
+
                 const validDNValues = data.features
-                  .map((f: any) => {
+                  .map((f:  GeoJSON.Feature) => {
                     let rawDN = f.properties?.DN;
                     if (typeof rawDN === "string") {
                       rawDN = rawDN.replace(/\s+/g, "");
@@ -356,7 +343,7 @@ export default function Map() {
                     return parseFloat(rawDN);
                   })
                   .filter((dn: number) => !isNaN(dn) && dn > 0);
-                
+
                 if (validDNValues.length > 0) {
                   yearMin = Math.min(yearMin, Math.min(...validDNValues));
                   yearMax = Math.max(yearMax, Math.max(...validDNValues));
@@ -367,13 +354,14 @@ export default function Map() {
               }
             }
           });
-          
-          // Update the dataset ranges with year-specific maximum if found
+
           if (foundValidValues) {
-            console.log(`Updated range for ${dataset} in year ${yearToShow}: min=${yearMin}, max=${yearMax}`);
+            console.log(
+              `Updated range for ${dataset} in year ${yearToShow}: min=${yearMin}, max=${yearMax}`
+            );
             datasetRanges.current[dataset] = {
-              min: datasetRanges.current[dataset].min, // Keep the overall min
-              max: yearMax // Use the year-specific max
+              min: datasetRanges.current[dataset].min,
+              max: yearMax,
             };
           }
         });
@@ -382,27 +370,23 @@ export default function Map() {
     [thresholdValues, contextUpdateVisibleYear, map, mapIsReady, activeLayers]
   );
 
-  // Optimized animation step function using requestAnimationFrame
   const animateStep = useCallback(() => {
     if (yearSequence.current.length <= 1) {
       setAnimating(false);
       return;
     }
 
-    // Get the year dataset map to check which years have data
-    const yearDatasetMap = (window as unknown).yearDatasetMap as Record<
+    const yearDatasetMap = (window as any).yearDatasetMap as Record<
       number,
       string[]
     >;
 
-    // Find the next valid year with data
     let nextIndex =
       (currentYearIndexRef.current + 1) % yearSequence.current.length;
     let nextYear = yearSequence.current[nextIndex];
     let attempts = 0;
-    const maxAttempts = yearSequence.current.length; // Avoid infinite loop
+    const maxAttempts = yearSequence.current.length;
 
-    // Keep incrementing until we find a year with data or we've checked all years
     while (
       (!yearDatasetMap[nextYear] || yearDatasetMap[nextYear].length === 0) &&
       attempts < maxAttempts
@@ -413,14 +397,12 @@ export default function Map() {
       attempts++;
     }
 
-    // If we've checked all years and none have data, stop animation
     if (attempts >= maxAttempts) {
       console.warn("No years have data. Stopping animation.");
       setAnimating(false);
       return;
     }
 
-    // Update the current index and display the next year
     currentYearIndexRef.current = nextIndex;
     console.log(`Animating to year ${nextYear} (index ${nextIndex})`);
     updateVisibleYear(nextYear);
@@ -432,7 +414,6 @@ export default function Map() {
     }
   }, [animating, updateVisibleYear, setAnimating]);
 
-  // Handle animation start/stop with performance optimizations
   useEffect(() => {
     if (animating && yearSequence.current.length > 1) {
       requestAnimationFrame(animateStep);
@@ -449,15 +430,13 @@ export default function Map() {
     };
   }, [animating, animateStep]);
 
-  // Toggle animation
   const toggleAnimation = useCallback(() => {
     if (yearSequence.current.length <= 1) {
       setError("Select multiple years to animate");
       return;
     }
 
-    // Check how many years have data
-    const yearDatasetMap = (window as unknown).yearDatasetMap as Record<
+    const yearDatasetMap = (window as any).yearDatasetMap as Record<
       number,
       string[]
     >;
@@ -475,7 +454,6 @@ export default function Map() {
       return;
     }
 
-    // Start from a year with data if current year doesn't have data
     const currentYear = yearSequence.current[currentYearIndexRef.current];
     const currentYearHasData =
       yearDatasetMap &&
@@ -497,21 +475,16 @@ export default function Map() {
     contextToggleAnimation();
   }, [contextToggleAnimation, setError, updateVisibleYear]);
 
-  // Change animation speed
   const changeAnimationSpeed = useCallback(
     (speedMs: number) => {
-      // Update the animation speed in the context
       contextChangeAnimationSpeed(speedMs);
-      
-      // If currently animating, restart the animation with the new speed
+
       if (animating) {
-        // Clear any existing timer
         if (animationTimerRef.current !== null) {
           clearTimeout(animationTimerRef.current);
           animationTimerRef.current = null;
         }
-        
-        // Start a new animation step with the updated speed
+
         animationTimerRef.current = setTimeout(() => {
           requestAnimationFrame(animateStep);
         }, speedMs);
@@ -520,15 +493,12 @@ export default function Map() {
     [animating, animateStep, contextChangeAnimationSpeed]
   );
 
-  // Helper function to zoom to the selected areas (regions or countries)
   const zoomToSelectedAreas = useCallback(() => {
     if (!map.current || !mapIsReady.current) return;
 
-    // Find all active layers for the current year
     const currentYear = displayYear;
     if (!currentYear) return;
 
-    // Get all visible layers for the current year
     const visibleLayers = activeLayers.current.filter((layerId) => {
       const parts = layerId.split("-");
       const layerYear =
@@ -538,7 +508,6 @@ export default function Map() {
 
     if (visibleLayers.length === 0) return;
 
-    // Collect all features from visible layers to calculate bounding box
     const allCoordinates: [number, number][] = [];
 
     visibleLayers.forEach((layerId) => {
@@ -546,15 +515,12 @@ export default function Map() {
       if (!source) return;
 
       try {
-        // Access the GeoJSON data
         const data = (source as any)._data;
         if (!data || !data.features) return;
 
-        // Extract coordinates from all features
         data.features.forEach((feature: any) => {
           if (!feature.geometry || !feature.geometry.coordinates) return;
 
-          // Handle different geometry types
           if (feature.geometry.type === "Polygon") {
             feature.geometry.coordinates[0].forEach(
               (coord: [number, number]) => {
@@ -576,7 +542,6 @@ export default function Map() {
 
     if (allCoordinates.length === 0) return;
 
-    // Calculate bounding box
     let minLng = Infinity;
     let maxLng = -Infinity;
     let minLat = Infinity;
@@ -611,9 +576,6 @@ export default function Map() {
     console.log("Zoomed to area bounds:", { minLng, maxLng, minLat, maxLat });
   }, [map, mapIsReady, displayYear, activeLayers]);
 
-  // No special loading state tracking
-
-  // Function to load geospatial data from the backend
   const loadGeoData = async (
     datasets: DatasetType[],
     countries: CountryType[],
@@ -802,7 +764,7 @@ export default function Map() {
                     // Attempt to extract and convert DN values
                     // Extract and clean the DN values from the GeoJSON features
                     const validDNValues = geojson.features
-                      .map((f) => {
+                      .map((f: any) => {
                         let rawDN = f.properties?.DN;
                         if (typeof rawDN === "string") {
                           // Remove all spaces so that "2 5" becomes "25"
@@ -812,12 +774,18 @@ export default function Map() {
                         console.log("Parsed DN value:", numDN);
                         return numDN;
                       })
-                      .filter((dn) => !isNaN(dn) && dn > 0);
+                      .filter((dn: any) => !isNaN(dn) && dn > 0);
 
                     if (validDNValues.length > 0) {
                       // Avoid stack overflow with spread operator on large arrays
-                      minDN = validDNValues.reduce((min, val) => val < min ? val : min, validDNValues[0]);
-                      maxDN = validDNValues.reduce((max, val) => val > max ? val : max, validDNValues[0]);
+                      minDN = validDNValues.reduce(
+                        (min:any, val:any) => (val < min ? val : min),
+                        validDNValues[0]
+                      );
+                      maxDN = validDNValues.reduce(
+                        (max:any, val:any) => (val > max ? val : max),
+                        validDNValues[0]
+                      );
                     } else {
                       // Fallback values if no valid numbers are found
                       if (minDN === Infinity) minDN = 1;
@@ -848,7 +816,7 @@ export default function Map() {
                     try {
                       map.current?.addSource(layerId, {
                         type: "geojson",
-                        data: geojson as unknown,
+                        data: geojson as any,
                       });
                       console.log(`Successfully added source for ${layerId}`);
                     } catch (err) {
@@ -1138,18 +1106,21 @@ export default function Map() {
 
                     let title = dataset;
                     if (dataset === "PopDensity") title = "Population Density";
-                    else if (dataset === "EVI") title = "Enhanced Vegetation Index";
-                    else if (dataset === "NDVI") title = "Normalized Difference Vegetation Index";
-                    
+                    else if (dataset === "EVI")
+                      title = "Enhanced Vegetation Index";
+                    else if (dataset === "NDVI")
+                      title = "Normalized Difference Vegetation Index";
+
                     const locationPrefix = isRegionLayer ? "Region" : "Country";
                     const locationDisplay = entityKey.replace(/_/g, " ");
                     const valueLabel =
                       dataset === "PopDensity" ? "Density" : "Value";
-                    
+
                     let units = "";
                     if (dataset === "PopDensity") units = "people/km²";
                     else if (dataset === "Precipitation") units = "mm";
-                    else if (dataset === "EVI" || dataset === "NDVI") units = "index";
+                    else if (dataset === "EVI" || dataset === "NDVI")
+                      units = "index";
 
                     const content = `<div style="font-size:12px">
                       <strong>${title} (${year})</strong><br/>
@@ -1226,7 +1197,7 @@ export default function Map() {
 
           // Check if the geojson has any valid DN values
           const hasValidDNValues = geojson.features.some(
-            (f) => typeof f.properties?.DN === "number" && f.properties.DN > 0
+            (f: any) => typeof f.properties?.DN === "number" && f.properties.DN > 0
           );
 
           if (!hasValidDNValues) {
@@ -1243,7 +1214,7 @@ export default function Map() {
       }
 
       // Store and log the refined year dataset map for debugging
-      (window as unknown).yearDatasetMap = yearsWithValidData;
+      (window as any).yearDatasetMap = yearsWithValidData;
       console.log(
         "Refined year dataset map with valid data only:",
         yearsWithValidData
@@ -1254,7 +1225,7 @@ export default function Map() {
       } else {
         if (yearSequence.current.length > 0) {
           // Find the first year that has valid data
-          const yearDatasetMap = (window as unknown).yearDatasetMap as Record<
+          const yearDatasetMap = (window as any).yearDatasetMap as Record<
             number,
             string[]
           >;
@@ -1440,7 +1411,7 @@ export default function Map() {
               datasetCountryCombo.current
                 .map((item) => item.region)
                 .filter((v, i, a) => v && a.indexOf(v) === i) as RegionType[]
-            }  
+            }
             activeYears={yearSequence.current}
           />
         </div>
@@ -1461,14 +1432,14 @@ export default function Map() {
                 {datasetRanges.current.PopDensity && (
                   <div className="text-xs text-gray-600">
                     (min:{" "}
-                    {thresholdValues.PopDensity > 0 
+                    {thresholdValues.PopDensity > 0
                       ? thresholdValues.PopDensity.toLocaleString()
                       : datasetRanges.current.PopDensity.min.toLocaleString(
-                        undefined,
-                        {
-                          maximumFractionDigits: 0,
-                        }
-                      )}
+                          undefined,
+                          {
+                            maximumFractionDigits: 0,
+                          }
+                        )}
                     , max:{" "}
                     {datasetRanges.current.PopDensity.max.toLocaleString(
                       undefined,
@@ -1485,14 +1456,14 @@ export default function Map() {
               </div>
               <div className="flex justify-between w-full text-xs mt-1 text-gray-600">
                 <span>
-                  {thresholdValues.PopDensity > 0 
+                  {thresholdValues.PopDensity > 0
                     ? thresholdValues.PopDensity.toLocaleString()
                     : datasetRanges.current.PopDensity?.min.toLocaleString(
-                      undefined,
-                      {
-                        maximumFractionDigits: 1,
-                      }
-                    )}{" "}
+                        undefined,
+                        {
+                          maximumFractionDigits: 1,
+                        }
+                      )}{" "}
                   people/km²
                 </span>
                 <span>
@@ -1533,14 +1504,14 @@ export default function Map() {
               </div>
               <div className="flex justify-between w-full text-xs mt-1 text-gray-600">
                 <span>
-                  {thresholdValues.Precipitation > 0 
-                    ? thresholdValues.Precipitation.toLocaleString() 
+                  {thresholdValues.Precipitation > 0
+                    ? thresholdValues.Precipitation.toLocaleString()
                     : datasetRanges.current.Precipitation?.min.toLocaleString(
-                      undefined,
-                      {
-                        maximumFractionDigits: 1,
-                      }
-                    )}
+                        undefined,
+                        {
+                          maximumFractionDigits: 1,
+                        }
+                      )}
                 </span>
                 <span>
                   {datasetRanges.current.Precipitation?.max.toLocaleString(
@@ -1616,7 +1587,7 @@ export default function Map() {
 
           {/* Warning about missing years */}
           {(() => {
-            const yearDatasetMap = (window as unknown).yearDatasetMap as Record<
+            const yearDatasetMap = (window as any).yearDatasetMap as Record<
               number,
               string[]
             >;
@@ -1660,7 +1631,7 @@ export default function Map() {
               // Get the year for this index
               const year = yearSequence.current[index];
               // Check if this year has data
-              const yearDatasetMap = (window as unknown)
+              const yearDatasetMap = (window as any)
                 .yearDatasetMap as Record<number, string[]>;
               const hasData =
                 yearDatasetMap &&
@@ -1749,7 +1720,7 @@ export default function Map() {
           <div className="flex justify-between mt-1">
             {yearSequence.current.map((year, index) => {
               // Check if this year has data
-              const yearDatasetMap = (window as unknown)
+              const yearDatasetMap = (window as any)
                 .yearDatasetMap as Record<number, string[]>;
               const hasData =
                 yearDatasetMap &&
@@ -1767,7 +1738,7 @@ export default function Map() {
                       console.log(`Directly selecting year ${year}`);
                       try {
                         // Get the year dataset map to verify data
-                        const yearDatasetMap = (window as unknown)
+                        const yearDatasetMap = (window as any)
                           .yearDatasetMap as Record<number, string[]>;
                         if (
                           !yearDatasetMap ||
@@ -1863,7 +1834,7 @@ export default function Map() {
               Year: {displayYear}
               {(() => {
                 // Check if the current displayed year actually has data
-                const yearDatasetMap = (window as unknown)
+                const yearDatasetMap = (window as any)
                   .yearDatasetMap as Record<number, string[]>;
                 const hasData =
                   yearDatasetMap &&

@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useState, useRef, useCallback } from 'react';
 import mapboxgl from "mapbox-gl";
-import { DatasetType, CountryType } from "@/lib/types";
+import { DatasetType, CountryType, RegionType } from "@/lib/types";
 
 // Define the context shape
 interface MapContextType {

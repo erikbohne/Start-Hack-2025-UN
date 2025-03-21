@@ -2,6 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import { DatasetType, CountryType, RegionType } from '@/lib/types';
+import { exportDataAsJSON } from '@/lib/api';
+import { downloadAsFile } from '@/lib/utils';
 
 interface DataControlsProps {
   onApplyFilters: (filters: {
@@ -59,6 +61,7 @@ export default function DataControls({
     [dataset: string]: number;
   }>(thresholdValues);
   const [viewMode, setViewMode] = useState<'countries' | 'regions'>('countries');
+  const [isExporting, setIsExporting] = useState<boolean>(false);
 
   // Reset selections when switching view modes
   useEffect(() => {
@@ -229,6 +232,37 @@ export default function DataControls({
       years: selectedYears,
       thresholds: localThresholds
     });
+  };
+
+  // Handle data export
+  const handleExportData = async () => {
+    if (isExporting) return; // Prevent multiple clicks
+    
+    try {
+      // Show loading state
+      setIsExporting(true);
+      
+      // Export the data
+      const exportData = await exportDataAsJSON({
+        datasets: selectedDatasets,
+        countries: viewMode === 'countries' ? selectedCountries : [],
+        regions: viewMode === 'regions' ? selectedRegions : [],
+        years: selectedYears,
+      });
+      
+      // Generate filename with current date
+      const date = new Date().toISOString().split('T')[0];
+      const filename = `geo-data-export-${date}.json`;
+      
+      // Download the file
+      downloadAsFile(exportData, filename);
+    } catch (error) {
+      console.error('Error exporting data:', error);
+      // You could show an error message to the user here
+    } finally {
+      // Reset loading state
+      setIsExporting(false);
+    }
   };
 
   // Define all available regions
@@ -546,6 +580,31 @@ export default function DataControls({
           ? `Apply Filters (${selectedCountries.length} ${selectedCountries.length === 1 ? 'Country' : 'Countries'})` 
           : `Apply Filters (${selectedRegions.length} ${selectedRegions.length === 1 ? 'Region' : 'Regions'})`}
       </button>
+      
+      <div className="mt-3">
+        <button
+          onClick={handleExportData}
+          disabled={isExporting}
+          className={`w-full py-2 border ${isExporting ? 'bg-gray-100 text-gray-500' : 'border-gray-300 hover:bg-gray-100 text-gray-700'} rounded-md transition-colors duration-200 font-medium flex items-center justify-center`}
+        >
+          {isExporting ? (
+            <>
+              <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-gray-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+              Exporting...
+            </>
+          ) : (
+            <>
+              <svg className="w-4 h-4 mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+              Export Current Data
+            </>
+          )}
+        </button>
+      </div>
     </div>
   );
 }
