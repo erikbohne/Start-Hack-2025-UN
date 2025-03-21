@@ -804,8 +804,9 @@ export default function Map() {
                       .filter((dn) => !isNaN(dn) && dn > 0);
 
                     if (validDNValues.length > 0) {
-                      minDN = Math.min(...validDNValues);
-                      maxDN = Math.max(...validDNValues);
+                      // Avoid stack overflow with spread operator on large arrays
+                      minDN = validDNValues.reduce((min, val) => val < min ? val : min, validDNValues[0]);
+                      maxDN = validDNValues.reduce((max, val) => val > max ? val : max, validDNValues[0]);
                     } else {
                       // Fallback values if no valid numbers are found
                       if (minDN === Infinity) minDN = 1;
