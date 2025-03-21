@@ -875,16 +875,17 @@ export default function Map() {
                           [
                             "interpolate",
                             ["linear"],
-                            ["get", "DN"],
-                            minDN,
+                            // Apply log transformation to the DN values
+                            ["max", ["log10", ["max", ["get", "DN"], 1]], 0],
+                            0, // log10(1) = 0
                             "rgba(255, 245, 235, 0.9)",
-                            minDN + (maxDN - minDN) * 0.25,
+                            1, // log10(10) = 1
                             "rgba(254, 225, 210, 0.9)",
-                            minDN + (maxDN - minDN) * 0.5,
+                            2, // log10(100) = 2
                             "rgba(252, 146, 114, 0.9)",
-                            minDN + (maxDN - minDN) * 0.75,
+                            3, // log10(1000) = 3
                             "rgba(251, 106, 74, 0.9)",
-                            maxDN,
+                            4, // log10(10000) = 4
                             "rgba(165, 15, 21, 0.9)",
                           ],
                         ],
