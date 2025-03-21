@@ -120,7 +120,72 @@ def analyze_data(state: GraphState):
                 if current_year not in active_years:
                     active_years.append(current_year)
     
-    # Get or set default values
+    # Get the user's original question
+    user_message = state["messages"][-1].content.lower() if state["messages"] else ""
+    
+    # Check for time range queries in the user's question
+    time_range_query = False
+    specific_country_query = None
+    specific_years = []
+    
+    # Check for population change queries
+    if "change" in user_message or "trend" in user_message or "difference" in user_message:
+        if "population" in user_message:
+            if "PopDensity" not in active_datasets:
+                active_datasets.append("PopDensity")
+            time_range_query = True
+    
+    # Check for specific country mentions
+    countries = ["Mali", "Chad", "Niger", "Burkina Faso", "Mauritania", "Senegal", "Sudan"]
+    for country in countries:
+        if country.lower() in user_message:
+            specific_country_query = country.replace(" ", "_")
+            break
+    
+    # Try to extract specific years mentioned in the query
+    import re
+    year_matches = re.findall(r'\b(20\d\d)\b', user_message)
+    if year_matches:
+        for year_match in year_matches:
+            try:
+                year = int(year_match)
+                if 2010 <= year <= 2020:  # Ensure it's in our available range
+                    specific_years.append(year)
+            except ValueError:
+                pass
+    
+    # Check for time period phrases
+    time_phrases = [
+        ("last 5 years", 5),
+        ("past 5 years", 5),
+        ("last five years", 5),
+        ("past five years", 5),
+        ("last 10 years", 10),
+        ("past 10 years", 10),
+        ("last ten years", 10),
+        ("past ten years", 10),
+        ("last 3 years", 3),
+        ("past 3 years", 3),
+        ("last three years", 3),
+        ("past three years", 3)
+    ]
+    
+    for phrase, years_back in time_phrases:
+        if phrase in user_message:
+            latest_year = 2020  # Assuming our data goes up to 2020
+            for y in range(latest_year - years_back + 1, latest_year + 1):
+                specific_years.append(y)
+            time_range_query = True
+            break
+    
+    # Apply the extracted query parameters
+    if specific_country_query:
+        active_countries = [specific_country_query]
+    
+    if specific_years:
+        active_years = specific_years
+    
+    # Get or set default values if still empty
     if not active_datasets:
         active_datasets = ["PopDensity", "Precipitation"]
     if not active_countries:
@@ -149,7 +214,8 @@ def analyze_data(state: GraphState):
                 
                 if geojson:
                     values = DataAnalysisTool.extract_data_values(geojson)
-                    stats = DataAnalysisTool.calculate_statistics(values)
+                    # Pass the geojson to calculate_statistics to get center of mass
+                    stats = DataAnalysisTool.calculate_statistics(values, geojson)
                     analysis_results["statistics"][f"{dataset}_{country}_{most_recent_year}"] = stats
     
     # Generate temporal trends analysis
@@ -175,30 +241,18 @@ def analyze_data(state: GraphState):
     # Format analysis results for LLM
     analysis_json = json.dumps(analysis_results, indent=2)
     
-    # Create detailed system prompt with the analysis data
-    system_content = f"""You are a data analyst specializing in geospatial data analysis for UN climate and population data.
+    # Create concise system prompt with the analysis data
+    system_content = f"""You are a data analyst. Based on the analysis data below, generate a concise and clear report in non-technical language.
 
-Based on the analysis of the map data, provide detailed insights in clear, non-technical language.
-
-Here is the raw analysis data to interpret:
-```json
+Raw analysis data:
+    
 {analysis_json}
-```
 
-Structure your response with the following sections:
+Analyze the data and provide insights, trends, and comparisons based on the user's query.
+If the user asked about specific countries, datasets, or years, focus on those in your analysis.
+Keep your response focused and informative.
 
-1. STATISTICAL SUMMARY: Interpret key metrics (mean, median, max/min values) for each dataset and country
-2. TEMPORAL TRENDS: Explain patterns and changes over time, highlighting significant year-to-year changes
-3. REGIONAL PATTERNS: Compare data across different countries, noting which regions stand out and why
-4. RELATIONSHIPS: Describe correlations between population density and precipitation where available
-5. KEY INSIGHTS: Summarize 3-5 most important findings from the data
-6. RECOMMENDATIONS: Suggest additional data that would enhance the analysis
-
-Important:
-- Explain what the numbers mean in real-world terms
-- Note any limitations in the data or analysis
-- Use clear, non-technical language for a general audience
-- When discussing trends, be specific about the magnitude and significance of changes
+Always try to see the data in light of each other.
 """
     
     # Add map context if available

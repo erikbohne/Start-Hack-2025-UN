@@ -574,7 +574,7 @@ export function VercelV0Chat() {
                 <div className="flex flex-col items-center justify-center h-full w-full p-4">
                     <div className="max-w-4xl w-full space-y-8">
                         <h1 className="text-4xl font-bold text-black text-center backdrop-blur-sm bg-white/30 rounded-lg p-4">
-                            What do you want to see?
+                            What do you want to visualize today? 🌍
                         </h1>
 
                         <div className="w-full">
@@ -629,7 +629,7 @@ export function VercelV0Chat() {
                                             ? "bg-gray-200/70 text-black"
                                             : message.type === "instruction"
                                             ? "bg-blue-100/70 text-blue-800 border border-blue-200"
-                                            : "bg-white/50 text-black"
+                                            : "bg-gray-100/0 text-black"
                                     )}
                                 >
                                     {message.type === "ai" ? (
