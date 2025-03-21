@@ -49,7 +49,7 @@ interface MapContextType {
   toggleAnimation: () => void;
   changeAnimationSpeed: (speedMs: number) => void;
   handleThresholdChange: (dataset: string, value: number) => void;
-  loadGeoData: (datasets: DatasetType[], countries: CountryType[], years: number[], regions?: string[]) => Promise<void>;
+  loadGeoData: (datasets: DatasetType[], countries: CountryType[], years: number[], regions?: RegionType[]) => Promise<void>;
   handleApplyFilters: (filters: {
     datasets: DatasetType[];
     countries: CountryType[];
@@ -141,7 +141,7 @@ export const MapProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     datasets: DatasetType[],
     countries: CountryType[],
     years: number[],
-    regions: string[] = []
+    regions: RegionType[] = []
   ) => {
     // Stub implementation that will be overridden by Map component
     console.log("loadGeoData called with:", {datasets, countries, regions, years});
@@ -181,7 +181,7 @@ export const MapProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const handleApplyFilters = (filters: {
     datasets: DatasetType[];
     countries: CountryType[];
-    regions: string[];
+    regions: RegionType[];
     years: number[];
     thresholds?: { [dataset: string]: number };
   }) => {

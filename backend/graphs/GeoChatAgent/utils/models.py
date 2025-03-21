@@ -48,7 +48,7 @@ class TimelineParameters(BaseModel):
         default="PopDensity"
     )
     country: str = Field(
-        description="Country to create timeline animation for (Mali, Chad, Niger, Burkina_Faso, Mauritania, Senegal, Sudan)",
+        description="Country or region to create timeline animation for (Mali, Chad, Niger, Burkina_Faso, Mauritania, Senegal, Sudan, Assaba_Hodh_El_Gharbi_Tagant, Sahel_Est_Centre-Est)",
         default="Mali"
     )
     start_year: int = Field(

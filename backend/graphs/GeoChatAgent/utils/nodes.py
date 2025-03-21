@@ -417,16 +417,20 @@ def instructions(state: GraphState):
         # Extract any country mentions from the user message for center action
         user_message = state["messages"][-1].content if state["messages"] else ""
 
-        # Extract map context country information
+        # Extract map context country and region information
         active_countries = []
+        active_regions = []
         if state.get("map_context"):
             map_context = state["map_context"]
             for line in map_context.split("\n"):
                 if "Countries shown:" in line:
                     countries_text = line.split("Countries shown:")[1].strip()
                     active_countries = [c.strip() for c in countries_text.split(",")]
+                if "Regions shown:" in line:
+                    regions_text = line.split("Regions shown:")[1].strip()
+                    active_regions = [r.strip() for r in regions_text.split(",")]
 
-        # Country coordinates
+        # Country and region coordinates
         country_coords = {
             "Burkina_Faso": [-1.561593, 12.364637],
             "Burkina Faso": [-1.561593, 12.364637],
@@ -436,28 +440,34 @@ def instructions(state: GraphState):
             "Niger": [8.081666, 17.607789],
             "Senegal": [-14.452362, 14.497401],
             "Sudan": [30.217636, 12.862807],
+            # Regions
+            "Assaba_Hodh_El_Gharbi_Tagant": [-10.940835, 21.00789],
+            "Sahel_Est_Centre-Est": [-1.561593, 12.364637]
         }
 
-        # Try to identify the most relevant country
-        target_country = None
+        # Try to identify the most relevant country or region
+        target_location = None
 
-        # First, check if a specific country is mentioned in the user message
-        for country in country_coords.keys():
-            if country.lower().replace("_", " ") in user_message.lower():
-                target_country = country
+        # First, check if a specific country or region is mentioned in the user message
+        for location in country_coords.keys():
+            if location.lower().replace("_", " ") in user_message.lower():
+                target_location = location
                 break
 
-        # If no country in message, use the first active country
-        if not target_country and active_countries and len(active_countries) > 0:
-            target_country = active_countries[0]
+        # If no location in message, use the first active country or region
+        if not target_location:
+            if active_regions and len(active_regions) > 0:
+                target_location = active_regions[0]
+            elif active_countries and len(active_countries) > 0:
+                target_location = active_countries[0]
 
-        # Create a CENTER instruction if we have a target country
-        if target_country and target_country in country_coords:
+        # Create a CENTER instruction if we have a target location
+        if target_location and target_location in country_coords:
             center_instruct = MapBoxInstruction(
                 action=MapBoxActions.SET_CENTER,
                 data={
-                    "center": country_coords[target_country],
-                    "zoom": 4,  # Zoomed out enough to show country context
+                    "center": country_coords[target_location],
+                    "zoom": 4,  # Zoomed out enough to show country or region context
                 },
             )
             state["frontend_actions"].append(center_instruct)
@@ -530,6 +540,10 @@ def instructions(state: GraphState):
             - Niger: [8.081666, 17.607789]
             - Senegal: [-14.452362, 14.497401]
             - Sudan: [30.217636, 12.862807]
+            
+            # Regions:
+            - Assaba Hodh El Gharbi Tagant: [-10.940835, 21.00789] # Same as Mauritania for now
+            - Sahel Est Centre-Est: [-1.561593, 12.364637] # Same as Burkina Faso for now
             
             Example output:
             {
@@ -647,6 +661,10 @@ def instructions(state: GraphState):
             - "Senegal"
             - "Sudan"
             
+            Available regions:
+            - "Assaba_Hodh_El_Gharbi_Tagant" (in Mauritania)
+            - "Sahel_Est_Centre-Est" (in Burkina Faso)
+            
             Available years: 2010 through 2020
             
             Example for loading population density data for Mali in 2015:
@@ -655,6 +673,7 @@ def instructions(state: GraphState):
               "data": {
                 "datasets": ["PopDensity"],
                 "countries": ["Mali"],
+                "regions": [],
                 "years": [2015],
                 "thresholds": {
                   "PopDensity": 20,
@@ -663,9 +682,11 @@ def instructions(state: GraphState):
               }
             }
             
-            Based on the user's request, determine which datasets, countries, and years should be displayed.
+            Based on the user's request, determine which datasets, countries, regions, and years should be displayed.
             If the user is asking about a specific type of data (population, rainfall, etc.), select the appropriate dataset.
             If the user is asking about specific countries, include those countries.
+            If the user is asking about specific regions, include those regions.
+            Note: Either include countries OR regions, not both at the same time.
             If the user mentions years, include those years. Otherwise default to 2015.
             
             You can set threshold values to filter the data. For example, if the user asks to see areas with population 

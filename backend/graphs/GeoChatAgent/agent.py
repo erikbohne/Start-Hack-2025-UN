@@ -78,10 +78,21 @@ async def stream_geo_chat(
 
         if "activeDatasets" in mapState and mapState["activeDatasets"]:
             datasets = set([d.get("dataset") for d in mapState["activeDatasets"]])
-            countries = set([d.get("country") for d in mapState["activeDatasets"]])
+            countries = set([d.get("country") for d in mapState["activeDatasets"] if d.get("country")])
+            regions = set([d.get("region") for d in mapState["activeDatasets"] if d.get("region")])
 
             map_state_description += f"- Active datasets: {', '.join(datasets)}\n"
-            map_state_description += f"- Countries shown: {', '.join(countries)}\n"
+            
+            if countries:
+                map_state_description += f"- Countries shown: {', '.join(countries)}\n"
+            
+            if regions:
+                map_state_description += f"- Regions shown: {', '.join(regions)}\n"
+                
+        if "selectedRegions" in mapState and mapState["selectedRegions"]:
+            regions = [r for r in mapState["selectedRegions"] if r]
+            if regions:
+                map_state_description += f"- Selected regions: {', '.join(regions)}\n"
 
         if "thresholdValues" in mapState:
             thresholds = [

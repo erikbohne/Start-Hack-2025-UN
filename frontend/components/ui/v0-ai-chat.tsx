@@ -247,7 +247,11 @@ export function VercelV0Chat() {
                 activeDatasets: mapContext.datasetCountryCombo.current,
                 thresholdValues: mapContext.thresholdValues,
                 datasetRanges: mapContext.datasetRanges.current,
-                animating: mapContext.animating
+                animating: mapContext.animating,
+                selectedRegions: mapContext.datasetCountryCombo.current
+                    .filter(combo => combo.region)
+                    .map(combo => combo.region)
+                    .filter((value, index, self) => value && self.indexOf(value) === index)
             };
 
             // Call the streaming API
@@ -514,19 +518,29 @@ export function VercelV0Chat() {
             if (instructionData.action === 'SET_GEOJSON' && instructionData.data) {
                 console.log("Processing SET_GEOJSON instruction:", instructionData.data);
                 
-                // Check if we have the datasets, countries, and years parameters
+                // Check if we have the datasets and years parameters, plus countries OR regions
                 if (
                     instructionData.data.datasets && 
-                    Array.isArray(instructionData.data.datasets) && 
-                    instructionData.data.countries && 
-                    Array.isArray(instructionData.data.countries) &&
+                    Array.isArray(instructionData.data.datasets) &&
                     instructionData.data.years && 
-                    Array.isArray(instructionData.data.years)
+                    Array.isArray(instructionData.data.years) &&
+                    (
+                        // Either countries OR regions should be present
+                        (instructionData.data.countries && Array.isArray(instructionData.data.countries)) ||
+                        (instructionData.data.regions && Array.isArray(instructionData.data.regions))
+                    )
                 ) {
+                    // Extract required data with defaults
+                    const datasets = instructionData.data.datasets;
+                    const countries = instructionData.data.countries || [];
+                    const regions = instructionData.data.regions || [];
+                    const years = instructionData.data.years;
+                    
                     console.log("Loading data with params:", {
-                        datasets: instructionData.data.datasets,
-                        countries: instructionData.data.countries,
-                        years: instructionData.data.years
+                        datasets,
+                        countries,
+                        regions,
+                        years
                     });
                     
                     // Set threshold values, ensuring minimum of 1 for each dataset
@@ -535,7 +549,7 @@ export function VercelV0Chat() {
                         : {};
                         
                     // Ensure all datasets have at least threshold of 1
-                    const allDatasets = instructionData.data.datasets as DatasetType[];
+                    const allDatasets = datasets as DatasetType[];
                     allDatasets.forEach(dataset => {
                         // If threshold is not specified or less than 1, set it to 1
                         const currentValue = thresholds[dataset];
@@ -550,11 +564,54 @@ export function VercelV0Chat() {
                         console.log(`Set threshold for ${dataset} to ${value}`);
                     });
                     
+                    // Switch the view mode in the DataControls component if needed
+                    if (regions.length > 0) {
+                        // Need to put DataControls in region mode first
+                        const viewModeButtons = Array.from(document.querySelectorAll('button'));
+                        const regionsButton = viewModeButtons.find(btn => 
+                            btn.textContent?.includes('Regions')
+                        );
+                        
+                        if (regionsButton) {
+                            console.log("Switching to Regions mode");
+                            regionsButton.click();
+                            
+                            // Allow a moment for the UI to update
+                            setTimeout(() => {
+                                // Select the specific regions
+                                regions.forEach(region => {
+                                    const regionButtons = Array.from(document.querySelectorAll('button'));
+                                    const regionButton = regionButtons.find(btn => 
+                                        btn.textContent?.replace(/\s+/g, ' ').includes(region.replace(/_/g, ' '))
+                                    );
+                                    
+                                    if (regionButton) {
+                                        console.log(`Selecting region: ${region}`);
+                                        regionButton.click();
+                                    }
+                                });
+                            }, 100);
+                        }
+                    } else if (countries.length > 0) {
+                        // Need to put DataControls in countries mode first
+                        const viewModeButtons = Array.from(document.querySelectorAll('button'));
+                        const countriesButton = viewModeButtons.find(btn => 
+                            btn.textContent?.includes('Countries')
+                        );
+                        
+                        if (countriesButton) {
+                            console.log("Switching to Countries mode");
+                            countriesButton.click();
+                        }
+                    }
+                    
                     // Set up the datasets and params in the context
+                    // Pass all parameters to loadGeoData, even if some are empty arrays
                     mapContext.loadGeoData(
-                        instructionData.data.datasets as DatasetType[],
-                        instructionData.data.countries as CountryType[],
-                        instructionData.data.years as number[]
+                        datasets as DatasetType[],
+                        countries as CountryType[],
+                        years as number[],
+                        regions as string[]
                     );
                     
                     // Find and click the Apply Filters button to apply all changes
@@ -571,14 +628,19 @@ export function VercelV0Chat() {
                         } else {
                             console.error("Could not find Apply Filters button");
                         }
-                    }, 100); // Short delay to ensure state updates have propagated
+                    }, 300); // Longer delay to ensure state updates have propagated
                     
-                    // Construct a response message
-                    const datasets = instructionData.data.datasets.join(', ');
-                    const countries = instructionData.data.countries.map(c => c.replace('_', ' ')).join(', ');
-                    const years = instructionData.data.years.join(', ');
+                    // Construct a response message based on whether we're using regions or countries
+                    const datasetNames = datasets.join(', ');
+                    const yearRange = years.join(', ');
                     
-                    return `I've loaded ${datasets} data for ${countries} (${years}).`;
+                    if (regions.length > 0) {
+                        const regionNames = regions.map(r => r.replace(/_/g, ' ')).join(', ');
+                        return `I've loaded ${datasetNames} data for regions: ${regionNames} (${yearRange}).`;
+                    } else {
+                        const countryNames = countries.map(c => c.replace(/_/g, ' ')).join(', ');
+                        return `I've loaded ${datasetNames} data for countries: ${countryNames} (${yearRange}).`;
+                    }
                 }
                 // Fallback to the old GeoJSON handling for backward compatibility
                 else if (instructionData.data.geojson) {
@@ -643,8 +705,8 @@ export function VercelV0Chat() {
                 
                 if (instructionData.action === 'loadData' && 
                     instructionData.data?.datasets && 
-                    instructionData.data?.countries && 
-                    instructionData.data?.years) {
+                    instructionData.data?.years && 
+                    (instructionData.data?.countries || instructionData.data?.regions)) {
                     
                     // Set threshold values, ensuring minimum of 1 for each dataset
                     const thresholds = instructionData.data.thresholds && typeof instructionData.data.thresholds === 'object' 
@@ -670,8 +732,9 @@ export function VercelV0Chat() {
                     // Set up the data in the map context
                     mapContext.loadGeoData(
                         instructionData.data.datasets as DatasetType[],
-                        instructionData.data.countries as CountryType[],
-                        instructionData.data.years as number[]
+                        instructionData.data.countries as CountryType[] || [],
+                        instructionData.data.years as number[],
+                        instructionData.data.regions as string[] || []
                     );
                     
                     // Find and click the Apply Filters button to apply all changes
