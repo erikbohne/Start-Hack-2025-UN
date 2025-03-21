@@ -2,6 +2,7 @@ from graphs.GeoChatAgent.utils.state import GraphState
 from graphs.GeoChatAgent.utils.models import AvailableSteps, RouteUserMessage, MapBoxActionList, MapBoxActions, MapBoxInstruction
 from langchain_core.messages import SystemMessage, AIMessage, HumanMessage
 from langchain_groq import ChatGroq
+from langchain_openai import AzureChatOpenAI
 from typing import Literal, List
 from dotenv import load_dotenv
 import os
@@ -11,10 +12,22 @@ from graphs.GeoChatAgent.utils.tools import DataAnalysisTool
 load_dotenv()
 
 # Initialize the LLM (defined at top level as recommended)
-llm = ChatGroq(
-    model_name="llama3-70b-8192",
-    api_key=os.getenv("GROQ_API_KEY"),
+# llm = ChatGroq(
+#     model_name="llama3-70b-8192",
+#     api_key=os.getenv("GROQ_API_KEY"),
+#     temperature=0,
+# )
+
+AZURE_OPENAI_KEY = os.getenv("AZURE_OPENAI_KEY")
+AZURE_OPENAI_URL = os.getenv("AZURE_OPENAI_URL")
+
+llm = AzureChatOpenAI(
     temperature=0,
+    model="gpt-4o",
+    api_key=AZURE_OPENAI_KEY,
+    azure_endpoint=AZURE_OPENAI_URL,
+    api_version="2024-10-21",
+    verbose=False,
 )
 
 
@@ -68,7 +81,7 @@ def route_user_message(state: GraphState) -> Literal["chat_agent", "create_instr
     system_message = SystemMessage(content=system_content)
     
     messages = [system_message] + state["messages"]
-    next = llm.with_structured_output(RouteUserMessage).invoke(messages)
+    next = llm.with_structured_output(RouteUserMessage, method="function_calling").invoke(messages)
     
     print(f"Routing decision: {next.route}")
     
@@ -223,7 +236,7 @@ def create_instructions(state: GraphState):
            [MapBoxActions.SET_CENTER, MapBoxActions.SET_GEOJSON]
         
         4. If the task is to "Compare rainfall in Mali and Chad from 2010 to 2015", you would return:
-           [MapBoxActions.SET_GEOJSON]
+           [MapBoxActions.SET_GEOJSON, MapBoxActions.SET_CENTER]
            
         5. If the task is to "Analyze the trends in population density for Mali", you would return:
            [MapBoxActions.ANALYZE_DATA]
@@ -249,7 +262,7 @@ def create_instructions(state: GraphState):
         
     system_message = SystemMessage(content=system_content)
     
-    instructions = llm.with_structured_output(MapBoxActionList).invoke(state["messages"])
+    instructions = llm.with_structured_output(MapBoxActionList, method="function_calling").invoke([system_message] + state["messages"])
     print(f"Created instructions: {instructions.actions}")
     return {"instructions_list": instructions.actions}
 
@@ -430,7 +443,7 @@ def instructions(state: GraphState):
         system_message = SystemMessage(content=system_content)
         
         # Ask LLM to generate the instruction
-        instruct = llm.with_structured_output(MapBoxInstruction).invoke([system_message] + state["messages"])
+        instruct = llm.with_structured_output(MapBoxInstruction, method="function_calling").invoke([system_message] + state["messages"])
         
         # Safety check - if we don't get proper coordinates
         if not instruct.data or "center" not in instruct.data or not isinstance(instruct.data["center"], list):
@@ -459,7 +472,7 @@ def instructions(state: GraphState):
             
             # Try one more time with a simpler prompt
             try:
-                instruct = llm.with_structured_output(MapBoxInstruction).invoke([system_message] + state["messages"])
+                instruct = llm.with_structured_output(MapBoxInstruction, method="function_calling").invoke([system_message] + state["messages"])
                 print(f"Second attempt result: {instruct}")
             except Exception as e:
                 print(f"Error in second LLM attempt: {e}")
@@ -495,7 +508,7 @@ def instructions(state: GraphState):
             
         system_message = SystemMessage(content=system_content)
         
-        instruct = llm.with_structured_output(MapBoxInstruction).invoke([system_message] + state["messages"])
+        instruct = llm.with_structured_output(MapBoxInstruction, method="function_calling").invoke([system_message] + state["messages"])
         state["frontend_actions"].append(instruct)
         
     elif next_action == MapBoxActions.SET_GEOJSON:
@@ -546,7 +559,7 @@ def instructions(state: GraphState):
             
         system_message = SystemMessage(content=system_content)
         
-        instruct = llm.with_structured_output(MapBoxInstruction).invoke([system_message] + state["messages"])
+        instruct = llm.with_structured_output(MapBoxInstruction, method="function_calling").invoke([system_message] + state["messages"])
         state["frontend_actions"].append(instruct)
 
     return state

@@ -358,12 +358,28 @@ export function VercelV0Chat() {
                         });
                     }
                     
-                    // Use the MapContext loadGeoData method to load the data
+                    // Set up the datasets and params in the context
                     mapContext.loadGeoData(
                         instructionData.data.datasets as DatasetType[],
                         instructionData.data.countries as CountryType[],
                         instructionData.data.years as number[]
                     );
+                    
+                    // Find and click the Apply Filters button to apply all changes
+                    setTimeout(() => {
+                        // Look for the Apply Filters button by text content
+                        const buttons = Array.from(document.querySelectorAll('button'));
+                        const applyButton = buttons.find(btn => 
+                            btn.textContent?.includes('Apply Filters')
+                        );
+                        
+                        if (applyButton) {
+                            console.log("Found Apply Filters button, clicking it");
+                            applyButton.click();
+                        } else {
+                            console.error("Could not find Apply Filters button");
+                        }
+                    }, 100); // Short delay to ensure state updates have propagated
                     
                     // Construct a response message
                     const datasets = instructionData.data.datasets.join(', ');
@@ -438,11 +454,28 @@ export function VercelV0Chat() {
                     instructionData.data?.countries && 
                     instructionData.data?.years) {
                     
+                    // Set up the data in the map context
                     mapContext.loadGeoData(
                         instructionData.data.datasets as DatasetType[],
                         instructionData.data.countries as CountryType[],
                         instructionData.data.years as number[]
                     );
+                    
+                    // Find and click the Apply Filters button to apply all changes
+                    setTimeout(() => {
+                        // Look for the Apply Filters button by text content
+                        const buttons = Array.from(document.querySelectorAll('button'));
+                        const applyButton = buttons.find(btn => 
+                            btn.textContent?.includes('Apply Filters')
+                        );
+                        
+                        if (applyButton) {
+                            console.log("Found Apply Filters button, clicking it");
+                            applyButton.click();
+                        } else {
+                            console.error("Could not find Apply Filters button");
+                        }
+                    }, 100); // Short delay to ensure state updates have propagated
                     
                     return "Loading the requested data...";
                 }
@@ -451,7 +484,25 @@ export function VercelV0Chat() {
                     instructionData.data?.dataset && 
                     instructionData.data?.value !== undefined) {
                     
+                    // First set the threshold
                     mapContext.handleThresholdChange(instructionData.data.dataset, instructionData.data.value);
+                    
+                    // Find and click the Apply Filters button
+                    setTimeout(() => {
+                        // Look for the Apply Filters button by text content
+                        const buttons = Array.from(document.querySelectorAll('button'));
+                        const applyButton = buttons.find(btn => 
+                            btn.textContent?.includes('Apply Filters')
+                        );
+                        
+                        if (applyButton) {
+                            console.log("Found Apply Filters button, clicking it");
+                            applyButton.click();
+                        } else {
+                            console.error("Could not find Apply Filters button");
+                        }
+                    }, 100); // Short delay to ensure state updates have propagated
+                    
                     return `Set threshold for ${instructionData.data.dataset} to ${instructionData.data.value}.`;
                 }
             }
