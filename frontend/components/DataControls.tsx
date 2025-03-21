@@ -89,12 +89,13 @@ export default function DataControls({
       setSelectedCountries(activeCountries);
       
       // If countries are selected, ensure we're in countries mode
-      if (viewMode !== 'countries') {
+      // But only on initial data load, not when user is manually switching tabs
+      if (viewMode !== 'countries' && !activeRegions?.length) {
         setViewMode('countries');
         setSelectedRegions([]);
       }
     }
-  }, [activeCountries, viewMode]);
+  }, [activeCountries]);
   
   // Handle external region selections
   useEffect(() => {
@@ -102,12 +103,13 @@ export default function DataControls({
       setSelectedRegions(activeRegions);
       
       // If regions are selected, ensure we're in regions mode
-      if (viewMode !== 'regions') {
+      // But only on initial data load, not when user is manually switching tabs
+      if (viewMode !== 'regions' && !activeCountries?.length) {
         setViewMode('regions');
         setSelectedCountries([]);
       }
     }
-  }, [activeRegions, viewMode]);
+  }, [activeRegions]);
   
   useEffect(() => {
     if (activeYears && activeYears.length > 0) {
@@ -275,7 +277,11 @@ export default function DataControls({
       <div className="mb-4">
         <div className="flex items-center justify-center gap-2 bg-gray-100 p-1 rounded-lg">
           <button
-            onClick={() => setViewMode('countries')}
+            onClick={() => {
+              // Explicitly reset regions when switching to countries
+              setSelectedRegions([]);
+              setViewMode('countries');
+            }}
             className={`flex-1 py-2 rounded-md text-sm font-medium ${
               viewMode === 'countries'
                 ? 'bg-blue-500 text-white'
@@ -285,7 +291,11 @@ export default function DataControls({
             Countries
           </button>
           <button
-            onClick={() => setViewMode('regions')}
+            onClick={() => {
+              // Explicitly reset countries when switching to regions
+              setSelectedCountries([]);
+              setViewMode('regions');
+            }}
             className={`flex-1 py-2 rounded-md text-sm font-medium ${
               viewMode === 'regions'
                 ? 'bg-blue-500 text-white'
