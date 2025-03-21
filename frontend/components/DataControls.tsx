@@ -477,14 +477,18 @@ export default function DataControls({
                   </div>
                   <input
                     type="range"
-                    min={Math.floor(datasetRanges.PopDensity.min)}
-                    max={Math.ceil(datasetRanges.PopDensity.max)}
-                    value={localThresholds.PopDensity}
-                    onChange={(e) => handleLocalThresholdChange("PopDensity", parseInt(e.target.value))}
+                    min={0}
+                    max={Math.ceil(Math.log10(datasetRanges.PopDensity.max) * 100)}
+                    value={Math.log10(localThresholds.PopDensity) * 100}
+                    onChange={(e) => {
+                      const logValue = parseInt(e.target.value) / 100;
+                      const actualValue = Math.round(Math.pow(10, logValue));
+                      handleLocalThresholdChange("PopDensity", actualValue);
+                    }}
                     className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
                   />
                   <div className="flex justify-between text-xs mt-1 text-gray-600">
-                    <span>{Math.floor(datasetRanges.PopDensity.min)}</span>
+                    <span>1</span>
                     <span>{Math.ceil(datasetRanges.PopDensity.max)}</span>
                   </div>
                 </div>

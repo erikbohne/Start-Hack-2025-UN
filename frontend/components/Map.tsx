@@ -771,13 +771,11 @@ export default function Map() {
                           rawDN = rawDN.replace(/\s+/g, "");
                         }
                         const numDN = parseFloat(rawDN);
-                        console.log("Parsed DN value:", numDN);
                         return numDN;
                       })
                       .filter((dn: any) => !isNaN(dn) && dn > 0);
 
                     if (validDNValues.length > 0) {
-                      // Avoid stack overflow with spread operator on large arrays
                       minDN = validDNValues.reduce(
                         (min:any, val:any) => (val < min ? val : min),
                         validDNValues[0]
@@ -787,14 +785,11 @@ export default function Map() {
                         validDNValues[0]
                       );
                     } else {
-                      // Fallback values if no valid numbers are found
                       if (minDN === Infinity) minDN = 1;
                       if (maxDN === 0) maxDN = 100;
                     }
 
-                    // Store range differently for regions vs countries
                     if (isRegion) {
-                      // Just use for this specific layer
                       console.log(
                         `Using region-specific range for ${layerId}: min=${minDN}, max=${maxDN}`
                       );
@@ -1017,6 +1012,70 @@ export default function Map() {
                         [">", ["to-number", ["get", "DN"], -1], 0], // Only show positive values
                       ],
                     });
+                  } else if (dataset === "LandCover") {
+                    // Define land cover colors based on land cover type values
+                    const landCoverColors = [
+                      [10, "rgba(17, 66, 0, 0.9)"],    // Forest
+                      [20, "rgba(120, 177, 89, 0.9)"], // Shrubland
+                      [30, "rgba(255, 236, 179, 0.9)"], // Grassland
+                      [40, "rgba(209, 161, 127, 0.9)"], // Cropland
+                      [50, "rgba(56, 168, 0, 0.9)"],   // Wetland
+                      [60, "rgba(255, 0, 0, 0.9)"],    // Urban
+                      [70, "rgba(255, 211, 127, 0.9)"], // Barren
+                      [80, "rgba(0, 124, 244, 0.9)"],  // Water
+                      [90, "rgba(255, 255, 255, 0.9)"], // Snow & Ice
+                    ];
+                    
+                    map.current?.addLayer({
+                      id: layerId,
+                      type: "fill",
+                      source: layerId,
+                      maxzoom: 12,
+                      paint: {
+                        "fill-color": [
+                          "case",
+                          // Check if DN is not a number or null/undefined
+                          [
+                            "any",
+                            ["==", ["typeof", ["get", "DN"]], "string"],
+                            ["==", ["get", "DN"], null],
+                          ],
+                          "rgba(0, 0, 0, 0)", // Transparent for N/A values
+                          // Use match expression to map land cover type values to colors
+                          ["match", ["to-number", ["get", "DN"], 0],
+                            0, "rgba(200, 200, 200, 0.9)",  // No Data
+                            7, "rgba(255, 211, 127, 0.9)",  // Sparse Vegetation
+                            10, "rgba(17, 66, 0, 0.9)",     // Forest
+                            16, "rgba(120, 177, 89, 0.9)",  // Mixed Forest/Shrubland
+                            20, "rgba(120, 177, 89, 0.9)",  // Shrubland 
+                            30, "rgba(255, 236, 179, 0.9)", // Grassland
+                            40, "rgba(209, 161, 127, 0.9)", // Cropland
+                            50, "rgba(56, 168, 0, 0.9)",    // Wetland
+                            60, "rgba(255, 0, 0, 0.9)",     // Urban
+                            70, "rgba(255, 211, 127, 0.9)", // Barren
+                            80, "rgba(0, 124, 244, 0.9)",   // Water
+                            90, "rgba(255, 255, 255, 0.9)", // Snow & Ice
+                            "rgba(169, 169, 169, 0.9)"      // Default/Unknown
+                          ]
+                        ],
+                        "fill-outline-color": [
+                          "case",
+                          [
+                            "any",
+                            ["==", ["typeof", ["get", "DN"]], "string"],
+                            ["==", ["get", "DN"], null],
+                          ],
+                          "rgba(0, 0, 0, 0)", // Transparent for N/A values
+                          "rgba(0, 0, 0, 0.4)", // Darker outline for valid values
+                        ],
+                        "fill-opacity": 0.9, // No need to conditionally set for land cover
+                      },
+                      layout: {
+                        visibility: "none",
+                      },
+                      // For land cover, we want to show all values
+                      filter: ["has", "DN"], // Only make sure DN property exists
+                    });
                   } else {
                     map.current?.addLayer({
                       id: layerId,
@@ -1110,6 +1169,27 @@ export default function Map() {
                       title = "Enhanced Vegetation Index";
                     else if (dataset === "NDVI")
                       title = "Normalized Difference Vegetation Index";
+                    else if (dataset === "LandCover") {
+                      title = "Land Cover";
+                      // For land cover, provide a more descriptive value
+                      const landCoverTypes: Record<number, string> = {
+                        0: "No Data",
+                        7: "Sparse Vegetation",
+                        10: "Forest",
+                        16: "Mixed Forest/Shrubland",
+                        20: "Shrubland",
+                        30: "Grassland",
+                        40: "Cropland",
+                        50: "Wetland",
+                        60: "Urban/Built-up",
+                        70: "Barren",
+                        80: "Water",
+                        90: "Snow & Ice"
+                      };
+                      if (typeof dn === "number" && landCoverTypes[dn]) {
+                        dnDisplay = landCoverTypes[dn];
+                      }
+                    }
 
                     const locationPrefix = isRegionLayer ? "Region" : "Country";
                     const locationDisplay = entityKey.replace(/_/g, " ");
@@ -1475,6 +1555,68 @@ export default function Map() {
                   )}{" "}
                   people/km²
                 </span>
+              </div>
+            </div>
+          )}
+          
+          {datasetCountryCombo.current.some(
+            ({ dataset }) => dataset === "LandCover"
+          ) && (
+            <div className="mb-3">
+              <div className="flex justify-between items-center">
+                <div className="text-xs font-semibold text-gray-700">
+                  Land Cover
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-1 mt-1">
+                <div className="flex items-center">
+                  <div className="w-3 h-3 mr-1" style={{backgroundColor: "rgba(200, 200, 200, 0.9)"}}></div>
+                  <span className="text-xs text-gray-600">No Data (0)</span>
+                </div>
+                <div className="flex items-center">
+                  <div className="w-3 h-3 mr-1" style={{backgroundColor: "rgba(255, 211, 127, 0.9)"}}></div>
+                  <span className="text-xs text-gray-600">Sparse Vegetation (7)</span>
+                </div>
+                <div className="flex items-center">
+                  <div className="w-3 h-3 mr-1" style={{backgroundColor: "rgba(17, 66, 0, 0.9)"}}></div>
+                  <span className="text-xs text-gray-600">Forest (10)</span>
+                </div>
+                <div className="flex items-center">
+                  <div className="w-3 h-3 mr-1" style={{backgroundColor: "rgba(120, 177, 89, 0.9)"}}></div>
+                  <span className="text-xs text-gray-600">Mixed Forest/Shrubland (16)</span>
+                </div>
+                <div className="flex items-center">
+                  <div className="w-3 h-3 mr-1" style={{backgroundColor: "rgba(120, 177, 89, 0.9)"}}></div>
+                  <span className="text-xs text-gray-600">Shrubland (20)</span>
+                </div>
+                <div className="flex items-center">
+                  <div className="w-3 h-3 mr-1" style={{backgroundColor: "rgba(255, 236, 179, 0.9)"}}></div>
+                  <span className="text-xs text-gray-600">Grassland (30)</span>
+                </div>
+                <div className="flex items-center">
+                  <div className="w-3 h-3 mr-1" style={{backgroundColor: "rgba(209, 161, 127, 0.9)"}}></div>
+                  <span className="text-xs text-gray-600">Cropland (40)</span>
+                </div>
+                <div className="flex items-center">
+                  <div className="w-3 h-3 mr-1" style={{backgroundColor: "rgba(56, 168, 0, 0.9)"}}></div>
+                  <span className="text-xs text-gray-600">Wetland (50)</span>
+                </div>
+                <div className="flex items-center">
+                  <div className="w-3 h-3 mr-1" style={{backgroundColor: "rgba(255, 0, 0, 0.9)"}}></div>
+                  <span className="text-xs text-gray-600">Urban (60)</span>
+                </div>
+                <div className="flex items-center">
+                  <div className="w-3 h-3 mr-1" style={{backgroundColor: "rgba(255, 211, 127, 0.9)"}}></div>
+                  <span className="text-xs text-gray-600">Barren (70)</span>
+                </div>
+                <div className="flex items-center">
+                  <div className="w-3 h-3 mr-1" style={{backgroundColor: "rgba(0, 124, 244, 0.9)"}}></div>
+                  <span className="text-xs text-gray-600">Water (80)</span>
+                </div>
+                <div className="flex items-center">
+                  <div className="w-3 h-3 mr-1" style={{backgroundColor: "rgba(255, 255, 255, 0.9)"}}></div>
+                  <span className="text-xs text-gray-600">Snow & Ice (90)</span>
+                </div>
               </div>
             </div>
           )}

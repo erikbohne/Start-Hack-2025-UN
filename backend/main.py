@@ -3,7 +3,7 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import StreamingResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
-from graphs.GeoChatAgent.agent import stream_geo_chat
+# from graphs.GeoChatAgent.agent import stream_geo_chat
 from fastapi.middleware.cors import CORSMiddleware
 from enum import Enum
 from typing import List, Dict, Any
@@ -292,9 +292,9 @@ async def stream_chat(request: ChatRequest):
     """
     Endpoint that streams a chat response with possible map instructions.
     """
-    return StreamingResponse(
-        stream_geo_chat(request.messages, request.mapState), media_type="text/plain"
-    )
+    # return StreamingResponse(
+    #     stream_geo_chat(request.messages, request.mapState), media_type="text/plain"
+    # )
 
 @app.get("/timeline-gif")
 async def get_timeline_gif(

@@ -103,6 +103,7 @@ export const MapProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }>({
     PopDensity: { min: 0, max: 0 },
     Precipitation: { min: 0, max: 0 },
+    LandCover: { min: 0, max: 100 },
     EVI: { min: 0, max: 1 },
     NDVI: { min: 0, max: 1 },
   });
