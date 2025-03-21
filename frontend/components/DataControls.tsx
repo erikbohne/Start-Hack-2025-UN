@@ -35,8 +35,8 @@ export default function DataControls({
     Precipitation: { min: 0, max: 1000 }
   },
   thresholdValues = {
-    PopDensity: 0,
-    Precipitation: 0
+    PopDensity: 1,
+    Precipitation: 1
   },
   onThresholdChange,
   activeDatasets,
@@ -178,8 +178,8 @@ export default function DataControls({
   // Reset thresholds to default values
   const resetThresholds = () => {
     const resetValues = {
-      PopDensity: 0,
-      Precipitation: 0
+      PopDensity: 1,
+      Precipitation: 1
     };
     setLocalThresholds(resetValues);
     

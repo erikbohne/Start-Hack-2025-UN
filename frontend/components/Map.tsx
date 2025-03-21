@@ -1215,13 +1215,13 @@ export default function Map() {
         }}
       />
 
-      {/* 3D Mode Toggle */}
-      <div className="absolute top-4 right-4 z-30">
+      {/* 3D Mode Toggle - Moved to center under navbar */}
+      <div className="fixed left-1/2 top-24 -translate-x-1/2 z-30">
         <button
           onClick={toggle3DMode}
-          className="bg-blue-500 text-white px-3 py-2 rounded-md shadow-lg flex items-center space-x-2 text-sm font-medium hover:bg-blue-600 transition-colors duration-200"
+          className="flex items-center text-base px-6 py-3.5 rounded-3xl bg-white/20 no-underline text-black backdrop-blur-lg hover:bg-black/80 hover:text-white transition-colors duration-300 ease-in-out font-inter"
         >
-          <span>{is3DMode ? "2D Mode" : "3D Mode"}</span>
+          <span className="mr-2">{is3DMode ? "2D Mode" : "3D Mode"}</span>
           <svg
             xmlns="http://www.w3.org/2000/svg"
             className="h-5 w-5"

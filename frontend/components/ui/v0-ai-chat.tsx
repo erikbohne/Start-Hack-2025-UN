@@ -11,6 +11,8 @@ import {
 } from "lucide-react";
 import { useMapContext } from "@/lib/MapContext";
 import { DatasetType, CountryType } from "@/lib/types";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 // Define message types
 type MessageType = "human" | "ai" | "instruction";
@@ -325,6 +327,11 @@ export function VercelV0Chat() {
                 return "I tried to set the zoom level, but couldn't get valid parameters.";
             }
             
+            if (instructionData.action === 'ANALYZE_DATA') {
+                console.log("Processing ANALYZE_DATA instruction");
+                return "Analyzing the current map data...";
+            }
+            
             if (instructionData.action === 'SET_GEOJSON' && instructionData.data) {
                 console.log("Processing SET_GEOJSON instruction:", instructionData.data);
                 
@@ -343,22 +350,49 @@ export function VercelV0Chat() {
                         years: instructionData.data.years
                     });
                     
-                    // Set threshold values if included
-                    if (instructionData.data.thresholds && typeof instructionData.data.thresholds === 'object') {
-                        Object.entries(instructionData.data.thresholds).forEach(([dataset, value]) => {
-                            if (typeof value === 'number') {
-                                mapContext.handleThresholdChange(dataset, value);
-                                console.log(`Set threshold for ${dataset} to ${value}`);
-                            }
-                        });
-                    }
+                    // Set threshold values, ensuring minimum of 1 for each dataset
+                    const thresholds = instructionData.data.thresholds && typeof instructionData.data.thresholds === 'object' 
+                        ? {...instructionData.data.thresholds} 
+                        : {};
+                        
+                    // Ensure all datasets have at least threshold of 1
+                    const allDatasets = instructionData.data.datasets as DatasetType[];
+                    allDatasets.forEach(dataset => {
+                        // If threshold is not specified or less than 1, set it to 1
+                        const currentValue = thresholds[dataset];
+                        if (typeof currentValue !== 'number' || currentValue < 1) {
+                            thresholds[dataset] = 1;
+                        }
+                    });
                     
-                    // Use the MapContext loadGeoData method to load the data
+                    // Apply all thresholds
+                    Object.entries(thresholds).forEach(([dataset, value]) => {
+                        mapContext.handleThresholdChange(dataset, value as number);
+                        console.log(`Set threshold for ${dataset} to ${value}`);
+                    });
+                    
+                    // Set up the datasets and params in the context
                     mapContext.loadGeoData(
                         instructionData.data.datasets as DatasetType[],
                         instructionData.data.countries as CountryType[],
                         instructionData.data.years as number[]
                     );
+                    
+                    // Find and click the Apply Filters button to apply all changes
+                    setTimeout(() => {
+                        // Look for the Apply Filters button by text content
+                        const buttons = Array.from(document.querySelectorAll('button'));
+                        const applyButton = buttons.find(btn => 
+                            btn.textContent?.includes('Apply Filters')
+                        );
+                        
+                        if (applyButton) {
+                            console.log("Found Apply Filters button, clicking it");
+                            applyButton.click();
+                        } else {
+                            console.error("Could not find Apply Filters button");
+                        }
+                    }, 100); // Short delay to ensure state updates have propagated
                     
                     // Construct a response message
                     const datasets = instructionData.data.datasets.join(', ');
@@ -433,11 +467,49 @@ export function VercelV0Chat() {
                     instructionData.data?.countries && 
                     instructionData.data?.years) {
                     
+                    // Set threshold values, ensuring minimum of 1 for each dataset
+                    const thresholds = instructionData.data.thresholds && typeof instructionData.data.thresholds === 'object' 
+                        ? {...instructionData.data.thresholds} 
+                        : {};
+                        
+                    // Ensure all datasets have at least threshold of 1
+                    const allDatasets = instructionData.data.datasets as DatasetType[];
+                    allDatasets.forEach(dataset => {
+                        // If threshold is not specified or less than 1, set it to 1
+                        const currentValue = thresholds[dataset];
+                        if (typeof currentValue !== 'number' || currentValue < 1) {
+                            thresholds[dataset] = 1;
+                        }
+                    });
+                    
+                    // Apply all thresholds
+                    Object.entries(thresholds).forEach(([dataset, value]) => {
+                        mapContext.handleThresholdChange(dataset, value as number);
+                        console.log(`Set threshold for ${dataset} to ${value}`);
+                    });
+                    
+                    // Set up the data in the map context
                     mapContext.loadGeoData(
                         instructionData.data.datasets as DatasetType[],
                         instructionData.data.countries as CountryType[],
                         instructionData.data.years as number[]
                     );
+                    
+                    // Find and click the Apply Filters button to apply all changes
+                    setTimeout(() => {
+                        // Look for the Apply Filters button by text content
+                        const buttons = Array.from(document.querySelectorAll('button'));
+                        const applyButton = buttons.find(btn => 
+                            btn.textContent?.includes('Apply Filters')
+                        );
+                        
+                        if (applyButton) {
+                            console.log("Found Apply Filters button, clicking it");
+                            applyButton.click();
+                        } else {
+                            console.error("Could not find Apply Filters button");
+                        }
+                    }, 100); // Short delay to ensure state updates have propagated
                     
                     return "Loading the requested data...";
                 }
@@ -446,7 +518,32 @@ export function VercelV0Chat() {
                     instructionData.data?.dataset && 
                     instructionData.data?.value !== undefined) {
                     
-                    mapContext.handleThresholdChange(instructionData.data.dataset, instructionData.data.value);
+                    // Get the threshold value, ensuring it's at least 1
+                    let thresholdValue = instructionData.data.value;
+                    if (thresholdValue < 1) {
+                        thresholdValue = 1;
+                        console.log(`Adjusted threshold value to minimum of 1`);
+                    }
+                    
+                    // Set the threshold
+                    mapContext.handleThresholdChange(instructionData.data.dataset, thresholdValue);
+                    
+                    // Find and click the Apply Filters button
+                    setTimeout(() => {
+                        // Look for the Apply Filters button by text content
+                        const buttons = Array.from(document.querySelectorAll('button'));
+                        const applyButton = buttons.find(btn => 
+                            btn.textContent?.includes('Apply Filters')
+                        );
+                        
+                        if (applyButton) {
+                            console.log("Found Apply Filters button, clicking it");
+                            applyButton.click();
+                        } else {
+                            console.error("Could not find Apply Filters button");
+                        }
+                    }, 100); // Short delay to ensure state updates have propagated
+                    
                     return `Set threshold for ${instructionData.data.dataset} to ${instructionData.data.value}.`;
                 }
             }
@@ -459,7 +556,7 @@ export function VercelV0Chat() {
     }, [mapContext]);
 
     return (
-        <div className={`flex flex-col h-full w-80 bg-white/30 backdrop-blur-sm text-black transition-all duration-300 transform ${
+        <div className={`flex flex-col h-full w-[500px] bg-white/30 backdrop-blur-sm text-black transition-all duration-300 transform ${
             isChatExpanded ? 'translate-x-0' : 'translate-x-[calc(100%-40px)]'
         }`}>
             <button
@@ -477,7 +574,7 @@ export function VercelV0Chat() {
                 <div className="flex flex-col items-center justify-center h-full w-full p-4">
                     <div className="max-w-4xl w-full space-y-8">
                         <h1 className="text-4xl font-bold text-black text-center backdrop-blur-sm bg-white/30 rounded-lg p-4">
-                            What do you want to see?
+                            What do you want to visualize today? 🌍
                         </h1>
 
                         <div className="w-full">
@@ -532,10 +629,46 @@ export function VercelV0Chat() {
                                             ? "bg-gray-200/70 text-black"
                                             : message.type === "instruction"
                                             ? "bg-blue-100/70 text-blue-800 border border-blue-200"
-                                            : "bg-white/50 text-black"
+                                            : "bg-gray-100/0 text-black"
                                     )}
                                 >
-                                    {message.content}
+                                    {message.type === "ai" ? (
+                                        <div className="chat-markdown">
+                                            <ReactMarkdown
+                                                remarkPlugins={[remarkGfm]}
+                                                components={{
+                                                    table: (props) => (
+                                                    <table
+                                                        className="table-auto border-collapse border border-gray-300"
+                                                        {...props}
+                                                    />
+                                                    ),
+                                                    th: (props) => (
+                                                    <th
+                                                        className="border border-gray-300 px-4 py-2 bg-gray-100"
+                                                        {...props}
+                                                    />
+                                                    ),
+                                                    td: (props) => (
+                                                    <td
+                                                        className="border border-gray-300 px-4 py-2"
+                                                        {...props}
+                                                    />
+                                                    ),
+                                                    a: (props) => (
+                                                    <a
+                                                        className="text-blue-500 hover:underline"
+                                                        {...props}
+                                                    />
+                                                    ),
+                                                }}
+                                                >
+                                                {message.content}
+                                            </ReactMarkdown>
+                                        </div>
+                                    ) : (
+                                        message.content
+                                    )}
                                 </div>
                             </div>
                         ))}
