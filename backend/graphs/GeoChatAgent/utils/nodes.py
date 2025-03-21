@@ -48,16 +48,17 @@ def route_user_message(state: GraphState) -> Literal["chat_agent", "create_instr
         - "Focus on Africa" (centering the map)
         - "Compare population between Chad and Mali" (loading data for comparison)
         - "Show me trends in rainfall from 2010 to 2020" (loading temporal data)
+        - "Display data for the Sahel region" (loading region data)
+        - "Show precipitation in the Assaba region" (loading region data)
         
         Examples that require data analysis:
         - "Analyze the precipitation patterns in Mali"
-        - "Calculate the average population density for Chad"
-        - "Compare the population density trends between Mali and Niger"
-        - "Find the correlation between precipitation and population in Burkina Faso"
-        - "What's the statistical significance of rainfall changes in Senegal over time?"
-        - "Show me a summary of population growth in Sudan"
-        - "Give me insights about the data for Mauritania"
-        - "Analyze the trends in the displayed data"
+        - "Give me an analysis of population density in Chad"
+        - "Analyze the correlation between precipitation and population in Burkina Faso"
+        - "Can you analyze the trends in rainfall over time?"
+        - "Provide statistical analysis of the population density data"
+        - "Calculate the average precipitation for Niger"
+        - "Compare and analyze the data between regions"
         
         Examples that require timeline animation (CREATE_GIF_FOR_TIMELINE):
         - "Create an animation of population density in Mali from 2015 to 2020"
@@ -74,14 +75,17 @@ def route_user_message(state: GraphState) -> Literal["chat_agent", "create_instr
         - Loading data (countries, datasets, years)
         - Setting thresholds
         - Visually comparing data
+        - When the user says "show" or "display" data, ALWAYS choose MAPBOX_INSTRUCTIONS
         
-        Choose DATA_ANALYSIS if the user is asking for:
-        - Statistical analysis
-        - Data comparisons and correlations
-        - Trend analysis
-        - Summaries of data patterns
-        - Insights about the data
-        - Mathematical calculations on the data
+        ONLY choose DATA_ANALYSIS if the user EXPLICITLY asks for analysis with words like:
+        - "Analyze..."
+        - "Give me an analysis of..."
+        - "Provide statistical analysis..."
+        - "Calculate statistics for..."
+        - "Compute the correlation between..."
+        - "What is the statistical significance of..."
+        
+        If the user simply asks to "show data" or "display data" or "show trends" without explicitly requesting analysis, choose MAPBOX_INSTRUCTIONS instead of DATA_ANALYSIS.
         
         Choose CREATE_GIF_FOR_TIMELINE if the user is asking for:
         - Timeline animations or visualizations
@@ -326,7 +330,7 @@ def create_instructions(state: GraphState):
         AVAILABLE MAP ACTIONS:
         - SET_CENTER: Move the map to center on a location
         - SET_ZOOM: Change the zoom level of the map
-        - SET_GEOJSON: Add data visualization to the map (countries, datasets, years)
+        - SET_GEOJSON: Add data visualization to the map (countries, regions, datasets, years)
         - ANALYZE_DATA: Perform statistical analysis on the displayed data
         
         Examples:
@@ -342,20 +346,37 @@ def create_instructions(state: GraphState):
         4. If the task is to "Compare rainfall in Mali and Chad from 2010 to 2015", you would return:
            [MapBoxActions.SET_GEOJSON, MapBoxActions.SET_CENTER]
            
-        5. If the task is to "Analyze the trends in population density for Mali", you would return:
+        5. If the task is to "Show data for the Sahel Est region", you would return:
+           [MapBoxActions.SET_CENTER, MapBoxActions.SET_GEOJSON]
+           
+        6. If the task is to "Show trends in population density for Mali", you would return:
+           [MapBoxActions.SET_CENTER, MapBoxActions.SET_GEOJSON]
+           
+        7. If the task is to "Display precipitation changes over time", you would return:
+           [MapBoxActions.SET_GEOJSON, MapBoxActions.SET_CENTER]
+           
+        8. ONLY if the task is explicitly "Analyze the data for Mali" or "Give me statistical analysis", you would return:
            [MapBoxActions.ANALYZE_DATA]
            
         When to use SET_GEOJSON:
         - Whenever the user wants to see specific data (population density, precipitation)
         - When the user wants to filter data (show areas with population above 50)
         - When the user wants to compare data across regions or time
-        - When the user mentions specific countries, datasets, or years
+        - When the user mentions specific countries, specific regions, datasets, or years
+        - ALWAYS use SET_GEOJSON when the user says "show" or "display" data
+        - ALWAYS use SET_GEOJSON when the user asks to see trends or changes over time
         
         When to use ANALYZE_DATA:
-        - When the user wants statistical analysis of the displayed data
-        - When the user wants trends, patterns, or insights from the data
-        - When the user wants to compare regions statistically
-        - When the user wants correlation analysis between datasets
+        - ONLY when the user EXPLICITLY asks for statistical analysis with phrases like:
+          * "Analyze the data"
+          * "Give me an analysis"
+          * "Provide statistical analysis"
+          * "Calculate statistics"
+          * "What is the statistical significance"
+        
+        IMPORTANT: If the user simply asks to "show data" or "display data" or "show trends" 
+        without explicitly requesting analysis, NEVER use ANALYZE_DATA. Instead use 
+        SET_GEOJSON to show the data visually on the map.
         
         Convert the user's request into a sequence of map actions.
         """
@@ -414,9 +435,28 @@ def instructions(state: GraphState):
     print(f"User message: {user_message}")
 
     if next_action == MapBoxActions.ANALYZE_DATA:
-        # Extract any country mentions from the user message for center action
-        user_message = state["messages"][-1].content if state["messages"] else ""
-
+        # First, verify that this is an explicit analysis request
+        user_message = state["messages"][-1].content.lower() if state["messages"] else ""
+        explicit_analysis_terms = ["analyze", "analysis", "statistical", "statistics", "calculate"]
+        
+        # Check if any explicit analysis terms are present in the user message
+        is_explicit_analysis = any(term in user_message for term in explicit_analysis_terms)
+        
+        # If not an explicit analysis request, switch to SET_GEOJSON instead
+        if not is_explicit_analysis:
+            print("User did not explicitly request analysis, switching to SET_GEOJSON instead")
+            # Update instructions_list to use SET_GEOJSON instead
+            if "instructions_list" not in state:
+                state["instructions_list"] = []
+                
+            # Replace the current instruction with SET_GEOJSON and SET_CENTER
+            state["instructions_list"] = [MapBoxActions.SET_GEOJSON, MapBoxActions.SET_CENTER]
+            
+            # Continue to the next instruction (which will now be SET_GEOJSON)
+            return state
+        
+        print("Proceeding with explicit data analysis as requested")
+        
         # Extract map context country and region information
         active_countries = []
         active_regions = []
@@ -425,10 +465,12 @@ def instructions(state: GraphState):
             for line in map_context.split("\n"):
                 if "Countries shown:" in line:
                     countries_text = line.split("Countries shown:")[1].strip()
-                    active_countries = [c.strip() for c in countries_text.split(",")]
+                    if countries_text:  # Only process if not empty
+                        active_countries = [c.strip() for c in countries_text.split(",") if c.strip()]
                 if "Regions shown:" in line:
                     regions_text = line.split("Regions shown:")[1].strip()
-                    active_regions = [r.strip() for r in regions_text.split(",")]
+                    if regions_text:  # Only process if not empty
+                        active_regions = [r.strip() for r in regions_text.split(",") if r.strip()]
 
         # Country and region coordinates
         country_coords = {
@@ -445,21 +487,70 @@ def instructions(state: GraphState):
             "Sahel_Est_Centre-Est": [-1.561593, 12.364637]
         }
 
-        # Try to identify the most relevant country or region
+        # Use the LLM to identify the most relevant location (country or region)
         target_location = None
-
-        # First, check if a specific country or region is mentioned in the user message
-        for location in country_coords.keys():
-            if location.lower().replace("_", " ") in user_message.lower():
-                target_location = location
-                break
-
-        # If no location in message, use the first active country or region
+        
+        # Prepare a prompt for the LLM to extract location
+        location_system_prompt = f"""
+        Identify if the user is asking about a specific country or region in their message.
+        
+        Available countries:
+        - Burkina_Faso
+        - Chad
+        - Mali 
+        - Mauritania
+        - Niger
+        - Senegal
+        - Sudan
+        
+        Available regions:
+        - Assaba_Hodh_El_Gharbi_Tagant (in Mauritania)
+        - Sahel_Est_Centre-Est (in Burkina Faso)
+        
+        Return the exact name from the list above that best matches what the user is asking about.
+        If there are multiple matches, return the best one.
+        If there's no clear match, return the most appropriate one from the current map context.
+        
+        Current map context:
+        {state.get('map_context', 'No context available')}
+        """
+        
+        try:
+            # Only create a brief conversation to extract the location
+            location_messages = [
+                SystemMessage(content=location_system_prompt),
+                HumanMessage(content=f"Extract the country or region from: {user_message}")
+            ]
+            
+            # Get a simple response with just the location name
+            location_response = llm.invoke(location_messages).content.strip()
+            
+            # If we got a response that's in our coordinates list, use it
+            if location_response in country_coords:
+                target_location = location_response
+                print(f"LLM identified location: {target_location}")
+            # Otherwise try to find the closest match
+            else:
+                for location in country_coords.keys():
+                    if location.lower() in location_response.lower() or location_response.lower() in location.lower():
+                        target_location = location
+                        print(f"Matched location '{location_response}' to '{target_location}'")
+                        break
+        except Exception as e:
+            print(f"Error using LLM to extract location: {e}")
+            
+        # Fallback to active regions/countries if LLM didn't find a match
         if not target_location:
             if active_regions and len(active_regions) > 0:
                 target_location = active_regions[0]
+                print(f"Using active region: {target_location}")
             elif active_countries and len(active_countries) > 0:
                 target_location = active_countries[0]
+                print(f"Using active country: {target_location}")
+            else:
+                # Default to Mali if nothing else is available
+                target_location = "Mali"
+                print(f"Using default country: {target_location}")
 
         # Create a CENTER instruction if we have a target location
         if target_location and target_location in country_coords:
@@ -554,7 +645,14 @@ def instructions(state: GraphState):
               }
             }
             
-            DO NOT return string names for locations. Always use coordinates.
+            DO NOT return string names for locations. Always use coordinates. Do not do DATA ANALYSIS here.
+            You are forced to use the MapBoxActions.SET_CENTER action AND IT ALWAYS NEEDS DATA.
+            If the user asks for a specific location, center the map on that location.
+            If the user asks for a region or country, center the map on the capital or a central point.
+            If the user asks for a comparison, center the map on a point that includes both locations.
+            Be precise with the coordinates and 
+
+            please do not zoom in to much
             """
 
         # Add map context if available
@@ -646,7 +744,7 @@ def instructions(state: GraphState):
 
     elif next_action == MapBoxActions.SET_GEOJSON:
         system_content = """You are going to set GeoJSON data parameters on the map.
-            You need to provide the datasets, countries, and years to display.
+            You need to provide the datasets, countries/regions, and years to display.
             
             Available datasets:
             - "PopDensity" (Population Density)

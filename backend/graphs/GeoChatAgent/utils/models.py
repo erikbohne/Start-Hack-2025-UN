@@ -22,9 +22,9 @@ class MapBoxActionList(BaseModel):
 class MapBoxInstruction(BaseModel):
     action: MapBoxActions = Field(
         default=MapBoxActions.NONE,
-        description="Action to be performed on the mapbox in the frontend",
+        description="Action to be performed on the mapbox in the frontend this is strictly set by the first system message and its only the data the ai should add and is based on the chat history",
     )
-    data: dict = Field(default_factory={})
+    data: dict | None = Field(default_factory={})
 
 
 class GeoChatResponse(BaseModel):
