@@ -159,7 +159,7 @@ export default function DataControls({
   };
 
   return (
-    <div className="p-4 max-w-md bg-white rounded-lg shadow-lg">
+    <div className="p-4 max-w-md bg-white/30 backdrop-blur-sm rounded-lg shadow-lg">
       <h2 className="text-lg font-bold mb-3 text-gray-800">Data Controls</h2>
       
       <div className="mb-4">

@@ -317,6 +317,7 @@ def create_instructions(state: GraphState):
            [MapBoxActions.ANALYZE_DATA]
            
         When to use SET_GEOJSON:
+        - Always when the user says show me ... (e.g show me the population of Mali)
         - Whenever the user wants to see specific data (population density, precipitation)
         - When the user wants to filter data (show areas with population above 50)
         - When the user wants to compare data across regions or time

@@ -706,7 +706,7 @@ export default function Map() {
             </svg>
           )}
         </button>
-        <div className="rounded-r-lg overflow-hidden bg-white shadow-lg">
+        <div className="rounded-r-lg overflow-hidden bg-white/30 backdrop-blur-sm shadow-lg">
           <DataControls
             onApplyFilters={handleApplyFilters}
             datasetRanges={datasetRanges.current}

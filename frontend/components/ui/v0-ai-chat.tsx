@@ -967,28 +967,6 @@ export function VercelV0Chat() {
                                 <ArrowUpIcon className="h-4 w-4" />
                             </button>
                         </div>
-                        
-                        {/* Debug buttons to add timeline links with different parameters */}
-                        <div className="mt-2 text-center flex flex-wrap justify-center gap-2">
-                            <button
-                                onClick={() => addTimelineLinkToChat("Mali", "PopDensity", 2015, 2020)}
-                                className="text-xs text-blue-600 hover:text-blue-800 bg-blue-100 hover:bg-blue-200 px-3 py-1 rounded-full"
-                            >
-                                Mali Pop. Density
-                            </button>
-                            <button
-                                onClick={() => addTimelineLinkToChat("Chad", "Precipitation", 2015, 2020)}
-                                className="text-xs text-green-600 hover:text-green-800 bg-green-100 hover:bg-green-200 px-3 py-1 rounded-full"
-                            >
-                                Chad Precipitation
-                            </button>
-                            <button
-                                onClick={() => addTimelineLinkToChat("Niger", "PopDensity", 2010, 2020)}
-                                className="text-xs text-purple-600 hover:text-purple-800 bg-purple-100 hover:bg-purple-200 px-3 py-1 rounded-full"
-                            >
-                                Niger Full Timeline
-                            </button>
-                        </div>
                     </div>
                 </>
             )}
